@@ -1,0 +1,142 @@
+version: '3'
+
+# Githelm 任务入口（taskfile.dev）。
+#
+# 定位：人机友好的编排层——底层命令一律委托根 package.json 的 pnpm script（或标注
+# 出处的 scripts/*.mjs 直接调用），不复制命令实现。pnpm script 仍是命令的单一
+# 权威来源（CI 与 docs 引用 pnpm run）；改命令只改 package.json 一处，Taskfile
+# 自动跟随。`task --list` 查看全部任务。
+
+tasks:
+  default:
+    desc: 列出全部任务
+    cmd: task --list
+
+  # ── 开发 ──────────────────────────────────────────────────────────────
+
+  install:
+    desc: 安装依赖（Node 20+ / pnpm 9+）
+    cmd: pnpm install
+
+  dev:
+    desc: Tauri 桌面开发模式（启用原生命令）
+    cmd: pnpm dev
+
+  dev:web:
+    desc: 纯浏览器开发模式（fallback 到 mock 数据，无需 Rust）
+    cmd: pnpm dev:web
+
+  # ── 编译 ──────────────────────────────────────────────────────────────
+
+  build:
+    desc: 生产构建（Tauri 全平台 bundles）
+    cmd: pnpm build
+
+  build:local:
+    desc: 本地 release 构建 .app（generate-release-config 自动处理无 updater 配置）
+    cmd: pnpm build:local
+
+  build:dmg:
+    desc: 本地 release 构建 arm64 DMG（CI 同款条件配置）
+    cmds:
+      - pnpm build:dmg
+
+  # ── 检查与测试 ────────────────────────────────────────────────────────
+
+  check:
+    desc: 提交前完整检查（typecheck + cargo check）
+    cmd: pnpm check
+
+  typecheck:
+    desc: TypeScript 类型检查（strict）
+    cmd: pnpm typecheck
+
+  test:
+    desc: 各包单元测试（如配置）
+    cmd: pnpm test
+
+  lint:rust:
+    desc: cargo clippy（-D warnings）
+    cmd: pnpm lint:rust
+
+  check:rust:
+    desc: cargo check（固定工具链）
+    cmd: pnpm check:rust
+
+  release:check:
+    desc: 完整发布检查（check + clippy）
+    cmd: pnpm release:check
+
+  # ── 发布 ──────────────────────────────────────────────────────────────
+  # 自动发布链：push v* tag → release-trigger.yml → release.yml
+  # （prepare 校验 → build → GitHub Release）。
+
+  bump:version:
+    desc: 推进版本号（5 处 manifest + CHANGELOG 分节）。用法：task bump:version -- 0.1.1
+    cmd: pnpm bump:version -- {{.CLI_ARGS}}
+
+  release:notes:
+    desc: |
+      CHANGELOG 校验/提取 release notes。
+      用法：task release:notes -- validate --tag v0.1.1 --changelog CHANGELOG.md
+           task release:notes -- extract --tag v0.1.1 --changelog CHANGELOG.md
+    cmd: pnpm release:notes -- {{.CLI_ARGS}}
+
+  release:tag:
+    desc: |
+      校验版本一致性与 CHANGELOG 条目后打 tag 并推送，触发 CI 自动发布。
+      用法：task release:tag -- 0.1.1
+    vars:
+      VERSION: '{{.CLI_ARGS}}'
+    preconditions:
+      - sh: 'test -n "{{.VERSION}}"'
+        msg: '缺少版本号。用法：task release:tag -- 0.1.1'
+      - sh: 'node scripts/bump-version.mjs --check'
+        msg: '版本号 5 处不一致，先运行 task bump:version -- {{.VERSION}}'
+    cmds:
+      - task: release:notes
+        vars:
+          CLI_ARGS: 'validate --tag v{{.VERSION}}'
+      - cmd: git tag "v{{.VERSION}}" && git push origin "v{{.VERSION}}"
+        desc: 打 tag 并推送，触发 release-trigger.yml
+
+  release:local:
+    desc: |
+      本地发布路径（CI 不可用时）：构建 arm64 DMG → SHA256SUMS → 提取 release notes
+      （附未签名构建安装说明）→ gh release create 上传。
+      前置：task bump:version -- <v> 已执行、版本提交已打 tag、gh 已认证。
+      用法：task release:local
+    vars:
+      VERSION:
+        sh: node -p "require('./package.json').version"
+      DMG_DIR: apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg
+    preconditions:
+      - sh: 'git rev-parse -q --verify "refs/tags/v{{.VERSION}}"'
+        msg: 'tag v{{.VERSION}} 不存在：先提交版本变更并 task release:tag -- {{.VERSION}}'
+      - sh: gh auth status
+        msg: 'gh 未认证或无仓库写权限'
+    cmds:
+      - task: build:dmg
+      - cmd: cd '{{.DMG_DIR}}' && shasum -a 256 "Githelm_{{.VERSION}}_aarch64.dmg" > SHA256SUMS.txt
+      - cmd: |
+          node scripts/changelog.mjs extract --tag "v{{.VERSION}}" --changelog CHANGELOG.md > /tmp/githelm-notes.md
+          cat >> /tmp/githelm-notes.md << 'NOTES_TAIL'
+
+          ---
+
+          ## 安装说明（未签名构建）
+
+          本版本为 adhoc 签名、未公证，仅支持 macOS Apple Silicon。首次打开会被
+          Gatekeeper 拦截，需移除 quarantine 属性：
+
+          1. 校验完整性：`shasum -a 256 -c SHA256SUMS.txt --ignore-missing`
+          2. 挂载 DMG，将 Githelm.app 拖入 /Applications
+          3. 移除隔离属性：`sudo xattr -rd com.apple.quarantine /Applications/Githelm.app`
+          NOTES_TAIL
+      - cmd: |
+          gh release create "v{{.VERSION}}" --verify-tag \
+            --title "Githelm v{{.VERSION}}" \
+            --notes-file /tmp/githelm-notes.md \
+            "apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Githelm_{{.VERSION}}_aarch64.dmg" \
+            "apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/SHA256SUMS.txt"
+        desc: 创建 GitHub Release 并上传 DMG + 校验和

@@ -1,0 +1,36 @@
+{
+  "name": "githelm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Githelm — Tauri 2 + React 19 desktop client for self-hosted deployment",
+  "type": "module",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --filter @githelm/desktop tauri:dev",
+    "dev:web": "pnpm --filter @githelm/desktop dev",
+    "build": "pnpm --filter @githelm/desktop tauri:build",
+    "build:local": "node scripts/generate-release-config.mjs && pnpm --filter @githelm/desktop exec tauri build --config src-tauri/tauri.ci.conf.json --bundles app",
+    "build:dmg": "node scripts/generate-release-config.mjs && pnpm --filter @githelm/desktop exec tauri build --target aarch64-apple-darwin --config src-tauri/tauri.ci.conf.json",
+    "typecheck": "pnpm -r --parallel run typecheck",
+    "test": "pnpm -r --parallel run test",
+    "check:rust": "pnpm --filter @githelm/desktop exec cargo check --manifest-path src-tauri/Cargo.toml --locked",
+    "lint:rust": "pnpm --filter @githelm/desktop exec cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings",
+    "check": "pnpm typecheck && pnpm check:rust",
+    "release:check": "pnpm check && pnpm lint:rust",
+    "release:notes": "node scripts/changelog.mjs",
+    "bump:version": "node scripts/bump-version.mjs",
+    "tauri": "pnpm --filter @githelm/desktop tauri"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

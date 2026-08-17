@@ -1,0 +1,362 @@
+name: Release
+
+# workflow_dispatch 驱动（支持全部/单平台重建修复）；
+# 由 release-trigger.yml 在 push v* tag 时自动 dispatch（platform=all）。
+#
+# 签名/公证凭据均未配置（无 Apple Developer ID）：对应步骤在凭据齐全时才执行，
+# 否则构建 adhoc 产物并在日志中标注，不阻塞发布链。
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "GitHub Release tag to build or repair, for example v0.1.0"
+        required: true
+        type: string
+      platform:
+        description: "Build all primary platforms or repair one platform"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - macos
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare release build
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      tag: ${{ steps.release.outputs.tag }}
+      platform: ${{ steps.release.outputs.platform }}
+      signing_enabled: ${{ steps.credentials.outputs.signing_enabled }}
+      notarization_enabled: ${{ steps.credentials.outputs.notarization_enabled }}
+
+    steps:
+      - name: Validate release request
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_PLATFORM: ${{ inputs.platform }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid release tag: $RELEASE_TAG"
+            exit 1
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "platform=$RELEASE_PLATFORM" >> "$GITHUB_OUTPUT"
+
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Verify version consistency with release tag
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          expected_version="${RELEASE_TAG#v}"
+          package_version="$(jq -r .version package.json)"
+          tauri_version="$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)"
+          cargo_version="$(
+            awk -F'"' '
+              /^\[package\]$/ { in_package = 1; next }
+              /^\[/ { in_package = 0 }
+              in_package && /^version[[:space:]]*=[[:space:]]*"/ { print $2; exit }
+            ' apps/desktop/src-tauri/Cargo.toml
+          )"
+          echo "tag=$expected_version package.json=$package_version tauri.conf.json=$tauri_version Cargo.toml=$cargo_version"
+          if [ "$expected_version" != "$package_version" ] \
+            || [ "$expected_version" != "$tauri_version" ] \
+            || [ "$expected_version" != "$cargo_version" ]; then
+            echo "::error::Version mismatch: tag $RELEASE_TAG must equal package.json ($package_version), tauri.conf.json ($tauri_version), Cargo.toml ($cargo_version)"
+            exit 1
+          fi
+          echo "Verified Githelm version: $expected_version"
+
+      - name: Verify changelog entry
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          node scripts/changelog.mjs validate \
+            --tag "$RELEASE_TAG" \
+            --changelog CHANGELOG.md
+          echo "Verified tagged changelog entry: $RELEASE_TAG"
+
+      - name: Detect release credentials
+        id: credentials
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_CERTIFICATE_PASSWORD" ]; then
+            echo "signing_enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signing_enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            echo "notarization_enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "notarization_enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve platform matrix
+        id: matrix
+        env:
+          RELEASE_PLATFORM: ${{ inputs.platform }}
+        run: |
+          set -euo pipefail
+          macos_arm64='{"target":"aarch64-apple-darwin","os":"macos-15"}'
+          case "$RELEASE_PLATFORM" in
+            all) matrix="[$macos_arm64]" ;;
+            macos) matrix="[$macos_arm64]" ;;
+            *) echo "::error::Unsupported platform: $RELEASE_PLATFORM"; exit 1 ;;
+          esac
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Set up Rust toolchain (rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install pnpm dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 无 updater 插件签名密钥时 createUpdaterArtifacts 会让构建失败；由
+      # generate-release-config.mjs 生成条件配置（克隆 release 配置并按需移除
+      # updater 字段），与本地 build:local 单一来源。
+      - name: Generate conditional Tauri config
+        run: node scripts/generate-release-config.mjs
+
+      - name: Run release source gate
+        run: pnpm release:check
+
+      - name: Import signing certificate
+        if: needs.prepare.outputs.signing_enabled == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/build.keychain"
+          security create-keychain -p ci "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          security unlock-keychain -p ci "$KEYCHAIN"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k ci "$KEYCHAIN"
+
+      - name: Build macOS arm64 release bundle
+        run: pnpm --filter @githelm/desktop exec tauri build --target ${{ matrix.target }} --config src-tauri/tauri.ci.conf.json
+
+      - name: Notarize and staple
+        if: needs.prepare.outputs.signing_enabled == 'true' && needs.prepare.outputs.notarization_enabled == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          APP="apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/Githelm.app"
+          test -d "$APP"
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/Githelm.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/Githelm.zip" \
+            --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "$APP"
+
+      - name: Note unsigned build
+        if: needs.prepare.outputs.signing_enabled != 'true'
+        run: |
+          echo "::warning::No Developer ID credentials; artifact is adhoc-signed and not notarized. Gatekeeper will block it on first launch."
+          echo "::notice::Unsigned install: after copying to /Applications, users must run 'sudo xattr -rd com.apple.quarantine /Applications/Githelm.app' to bypass Gatekeeper."
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: githelm-release-${{ matrix.target }}
+          if-no-files-found: error
+          path: |
+            apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+
+  release:
+    name: Publish GitHub Release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Extract release notes from changelog
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          node scripts/changelog.mjs extract \
+            --tag "$RELEASE_TAG" \
+            --changelog CHANGELOG.md \
+            --output release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::Release notes for ${RELEASE_TAG} are empty"
+            exit 1
+          fi
+
+      - name: Append unsigned install instructions
+        if: needs.prepare.outputs.signing_enabled != 'true'
+        run: |
+          cat >> release-notes.md <<'EOF'
+
+          ## 安装说明（未签名构建）
+
+          本产物为 adhoc 签名、未公证，仅支持 macOS Apple Silicon（arm64）。首次打开会被 Gatekeeper 拦截，安装步骤：
+
+          1. 双击挂载 `Githelm_*.dmg`，将 `Githelm.app` 拖入 `/Applications`
+          2. 执行以下命令移除隔离属性，跳过 Gatekeeper 检查：
+
+          ```bash
+          sudo xattr -rd com.apple.quarantine /Applications/Githelm.app
+          ```
+
+          请仅从本仓库的 GitHub Release 下载，并用 `SHA256SUMS.txt` 校验产物完整性。
+          EOF
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Merge existing assets and generate checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p publish
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            if ! gh release download "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "Githelm-*" \
+              --pattern "Githelm_*" \
+              --pattern "githelm-*" \
+              --dir publish; then
+              echo "No existing release assets found; publishing only newly built artifacts."
+            fi
+          fi
+          cp -a artifacts/. publish/
+          cd publish
+          # 清理可能的旧校验文件，避免把 SHA256SUMS.txt 自身纳入哈希输入（重定向会
+          # 先截断文件再求哈希，导致记录空文件哈希、产物无法通过自身校验）。
+          rm -f SHA256SUMS.txt
+          shopt -s nullglob
+          release_files=(Githelm-* Githelm_* githelm-*)
+          if [ "${#release_files[@]}" -eq 0 ]; then
+            echo "::error::No release artifacts found for checksum generation"
+            exit 1
+          fi
+          sha256sum "${release_files[@]}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          # 发布链自证：立即用校验文件校验其记录的产物哈希，确保 SHA256SUMS.txt
+          # 本身可用（非空哈希、无缺失文件），否则在 Release 上传前失败。
+          sha256sum -c SHA256SUMS.txt
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Githelm $RELEASE_TAG" \
+              --notes-file release-notes.md
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "Githelm $RELEASE_TAG" \
+              --notes-file release-notes.md
+          fi
+
+          shopt -s nullglob
+          new_files=(artifacts/*)
+          if [ "${#new_files[@]}" -eq 0 ]; then
+            echo "::error::No newly built release assets found"
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            "${new_files[@]}" \
+            publish/SHA256SUMS.txt

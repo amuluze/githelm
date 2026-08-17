@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for the Githelm main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-close",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-set-theme",
+    "core:app:allow-version",
+    "core:app:allow-name",
+    "os:default",
+    "store:default",
+    "notification:default",
+    "shell:default"
+  ]
+}

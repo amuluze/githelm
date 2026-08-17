@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────────
+# Dependencies
+# ─────────────────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+
+# ─────────────────────────────────────────────────────────────────
+# Build outputs
+# ─────────────────────────────────────────────────────────────────
+# Vite (apps/desktop)
+apps/desktop/dist/
+apps/desktop/tsconfig.tsbuildinfo
+apps/desktop/tsconfig.node.tsbuildinfo
+apps/desktop/.vite/
+
+# Tauri (apps/desktop/src-tauri)
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# Top-level patterns
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# ─────────────────────────────────────────────────────────────────
+# Tauri-specific generated files
+# ─────────────────────────────────────────────────────────────────
+# Conditional Tauri config emitted by scripts/generate-release-config.mjs
+apps/desktop/src-tauri/tauri.ci.conf.json
+
+# Release notes extracted from CHANGELOG by the release workflow
+/release-notes.md
+
+# ─────────────────────────────────────────────────────────────────
+# Environment
+# ─────────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ─────────────────────────────────────────────────────────────────
+# IDE / Editor
+# ─────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─────────────────────────────────────────────────────────────────
+# Tooling metadata (must NOT be committed)
+# ─────────────────────────────────────────────────────────────────
+# OMO coding agent state
+.omo/
+# Claude / agent sessions
+.claude/
+
+# ─────────────────────────────────────────────────────────────────
+# Logs
+# ─────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─────────────────────────────────────────────────────────────────
+# Test coverage
+# ─────────────────────────────────────────────────────────────────
+coverage/
+*.lcov
+*.nyc_output

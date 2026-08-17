@@ -1,0 +1,133 @@
+/*
+ * ─────────────────────────────────────────────────────────────────
+ *  GIT HELM THEME TOKENS
+ *  Stripped-down port of openship's th-* system. Two surfaces:
+ *  - light (default) and dark via [data-theme="dark"] on <html>.
+ *  - Scale primitives: --th-on-{N} (foreground opacity),
+ *    --th-sf-{N} (surface fill opacity).
+ *  - Semantic aliases: --th-text-*, --th-bg-*, --th-bd-*.
+ *  Usage:
+ *    className="th-text-body"
+ *    className="th-card"
+ *    style={{ color: "var(--th-text-muted)" }}
+ * ─────────────────────────────────────────────────────────────────
+ */
+
+:root,
+[data-theme="light"] {
+  /* Foreground scale — black on white */
+  --th-on-04: rgba(0, 0, 0, 0.04);
+  --th-on-05: rgba(0, 0, 0, 0.05);
+  --th-on-06: rgba(0, 0, 0, 0.06);
+  --th-on-08: rgba(0, 0, 0, 0.08);
+  --th-on-10: rgba(0, 0, 0, 0.10);
+  --th-on-12: rgba(0, 0, 0, 0.12);
+  --th-on-15: rgba(0, 0, 0, 0.15);
+  --th-on-20: rgba(0, 0, 0, 0.20);
+  --th-on-30: rgba(0, 0, 0, 0.30);
+  --th-on-40: rgba(0, 0, 0, 0.40);
+  --th-on-50: rgba(0, 0, 0, 0.50);
+  --th-on-60: rgba(0, 0, 0, 0.60);
+  --th-on-70: rgba(0, 0, 0, 0.70);
+  --th-on-80: rgba(0, 0, 0, 0.80);
+  --th-on-90: rgba(0, 0, 0, 0.90);
+  --th-on-95: rgba(0, 0, 0, 0.95);
+
+  /* Surface fill scale */
+  --th-sf-01: rgba(0, 0, 0, 0.01);
+  --th-sf-02: rgba(0, 0, 0, 0.02);
+  --th-sf-03: rgba(0, 0, 0, 0.03);
+  --th-sf-04: rgba(0, 0, 0, 0.04);
+  --th-sf-05: rgba(0, 0, 0, 0.05);
+  --th-sf-06: rgba(0, 0, 0, 0.06);
+  --th-sf-08: rgba(0, 0, 0, 0.08);
+  --th-sf-10: rgba(0, 0, 0, 0.10);
+  --th-sf-15: rgba(0, 0, 0, 0.15);
+
+  /* Page surfaces */
+  --th-bg-app: #ffffff;
+  --th-bg-elevated: #ffffff;
+  --th-bg-inset: #fafafa;
+  --th-bg-hover: rgba(0, 0, 0, 0.04);
+
+  /* Borders */
+  --th-bd-subtle: rgba(0, 0, 0, 0.06);
+  --th-bd-default: rgba(0, 0, 0, 0.10);
+  --th-bd-strong: rgba(0, 0, 0, 0.16);
+
+  /* Text */
+  --th-text-title: rgba(0, 0, 0, 0.95);
+  --th-text-body: rgba(0, 0, 0, 0.80);
+  --th-text-muted: rgba(0, 0, 0, 0.55);
+  --th-text-subtle: rgba(0, 0, 0, 0.40);
+  --th-text-inverse: #ffffff;
+
+  /* Brand */
+  --th-accent: #0b7285;
+  --th-accent-hover: #095863;
+
+  /* Status — semantic (per-context tuned) */
+  --th-status-running: #10b981;
+  --th-status-warning: #f59e0b;
+  --th-status-error: #ef4444;
+  --th-status-idle: #64748b;
+
+  /* Window chrome */
+  --th-titlebar-bg: rgba(255, 255, 255, 0.85);
+  --th-titlebar-text: rgba(0, 0, 0, 0.85);
+}
+
+[data-theme="dark"] {
+  --th-on-04: rgba(255, 255, 255, 0.04);
+  --th-on-05: rgba(255, 255, 255, 0.05);
+  --th-on-06: rgba(255, 255, 255, 0.06);
+  --th-on-08: rgba(255, 255, 255, 0.08);
+  --th-on-10: rgba(255, 255, 255, 0.10);
+  --th-on-12: rgba(255, 255, 255, 0.12);
+  --th-on-15: rgba(255, 255, 255, 0.15);
+  --th-on-20: rgba(255, 255, 255, 0.20);
+  --th-on-30: rgba(255, 255, 255, 0.30);
+  --th-on-40: rgba(255, 255, 255, 0.40);
+  --th-on-50: rgba(255, 255, 255, 0.50);
+  --th-on-60: rgba(255, 255, 255, 0.60);
+  --th-on-70: rgba(255, 255, 255, 0.70);
+  --th-on-80: rgba(255, 255, 255, 0.80);
+  --th-on-90: rgba(255, 255, 255, 0.90);
+  --th-on-95: rgba(255, 255, 255, 0.95);
+
+  --th-sf-01: rgba(255, 255, 255, 0.01);
+  --th-sf-02: rgba(255, 255, 255, 0.02);
+  --th-sf-03: rgba(255, 255, 255, 0.03);
+  --th-sf-04: rgba(255, 255, 255, 0.04);
+  --th-sf-05: rgba(255, 255, 255, 0.05);
+  --th-sf-06: rgba(255, 255, 255, 0.06);
+  --th-sf-08: rgba(255, 255, 255, 0.08);
+  --th-sf-10: rgba(255, 255, 255, 0.10);
+  --th-sf-15: rgba(255, 255, 255, 0.15);
+
+  --th-bg-app: #0a0a0a;
+  --th-bg-elevated: #141414;
+  --th-bg-inset: #0c0c0c;
+  --th-bg-hover: rgba(255, 255, 255, 0.06);
+
+  --th-bd-subtle: rgba(255, 255, 255, 0.08);
+  --th-bd-default: rgba(255, 255, 255, 0.12);
+  --th-bd-strong: rgba(255, 255, 255, 0.20);
+
+  --th-text-title: rgba(255, 255, 255, 0.95);
+  --th-text-body: rgba(255, 255, 255, 0.80);
+  --th-text-muted: rgba(255, 255, 255, 0.55);
+  --th-text-subtle: rgba(255, 255, 255, 0.40);
+  --th-text-inverse: #000000;
+
+  --th-accent: #4cb8c0;
+  --th-accent-hover: #5fc9d1;
+
+  --th-status-running: #34d399;
+  --th-status-warning: #fbbf24;
+  --th-status-error: #f87171;
+  --th-status-idle: #94a3b8;
+
+  --th-titlebar-bg: rgba(20, 20, 20, 0.85);
+  --th-titlebar-text: rgba(255, 255, 255, 0.90);
+}

@@ -1,0 +1,4 @@
+# Rust 工具链固定（CI 与本地一致）。`cargo` / `clippy` / `rustfmt` 都按此版本拉取。
+[toolchain]
+channel = "stable"
+profile = "minimal"

@@ -1,0 +1,53 @@
+{
+  "name": "@githelm/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Githelm desktop — Tauri 2 + React 19 frontend",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo node_modules src-tauri/target"
+  },
+  "dependencies": {
+    "@githelm/core": "workspace:*",
+    "@githelm/ui": "workspace:*",
+    "@tanstack/react-query": "^5.62.7",
+    "@tauri-apps/api": "^2.2.0",
+    "@tauri-apps/plugin-os": "^2.2.0",
+    "@tauri-apps/plugin-store": "^2.2.0",
+    "@tauri-apps/plugin-notification": "^2.2.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.460.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-hook-form": "^7.54.0",
+    "react-router-dom": "^7.1.0",
+    "sonner": "^1.7.0",
+    "tailwind-merge": "^3.0.0",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.2.0",
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^4.0.0",
+    "@tailwindcss/postcss": "^4.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.11"
+  }
+}

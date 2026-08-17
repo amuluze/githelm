@@ -1,0 +1,139 @@
+@import "tailwindcss";
+@import "./theme.css";
+@import "@xterm/xterm/css/xterm.css";
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    background-color: var(--th-bg-app);
+    color: var(--th-text-body);
+    color-scheme: light dark;
+    font-family:
+      -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+      Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--th-bg-app);
+    overflow: hidden;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--th-bd-default);
+    border-radius: 6px;
+    border: 2px solid var(--th-bg-app);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--th-bd-strong);
+  }
+}
+
+@layer utilities {
+  /* Semantic text colors */
+  .th-text-title {
+    color: var(--th-text-title);
+  }
+  .th-text-body {
+    color: var(--th-text-body);
+  }
+  .th-text-muted {
+    color: var(--th-text-muted);
+  }
+  .th-text-subtle {
+    color: var(--th-text-subtle);
+  }
+  .th-text-inverse {
+    color: var(--th-text-inverse);
+  }
+
+  /* Semantic backgrounds */
+  .th-bg-app {
+    background-color: var(--th-bg-app);
+  }
+  .th-bg-elevated {
+    background-color: var(--th-bg-elevated);
+  }
+  .th-bg-inset {
+    background-color: var(--th-bg-inset);
+  }
+
+  /* Borders */
+  .th-bd-subtle {
+    border-color: var(--th-bd-subtle);
+  }
+  .th-bd-default {
+    border-color: var(--th-bd-default);
+  }
+
+  /* Card chrome */
+  .th-card {
+    background-color: var(--th-bg-elevated);
+    border: 1px solid var(--th-bd-subtle);
+    border-radius: 0.5rem;
+  }
+
+  /* Inline link styling */
+  .th-link {
+    color: var(--th-accent);
+    text-decoration: none;
+  }
+  .th-link:hover {
+    color: var(--th-accent-hover);
+    text-decoration: underline;
+  }
+
+  /* Drag region for the title bar on macOS */
+  .th-drag {
+    -webkit-app-region: drag;
+  }
+  .th-no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  /* Reusable form input chrome */
+  .th-input {
+    width: 100%;
+    border-radius: 0.375rem;
+    border: 1px solid var(--th-bd-default);
+    background-color: var(--th-bg-app);
+    padding: 0.4375rem 0.625rem;
+    font-size: 0.8125rem;
+    color: var(--th-text-title);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .th-input:focus {
+    outline: none;
+    border-color: var(--th-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--th-accent) 20%, transparent);
+  }
+  .th-input::placeholder {
+    color: var(--th-text-subtle);
+  }
+}
