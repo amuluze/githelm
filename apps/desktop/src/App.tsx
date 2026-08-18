@@ -10,10 +10,12 @@ import { LogsPage } from "./routes/Logs";
 import { SettingsPage } from "./routes/Settings";
 import { useThemeStore } from "./stores/theme";
 import { applyThemeToDocument } from "./lib/theme";
+import { useAutoUpdate } from "./hooks/useAutoUpdate";
 
 export const App = () => {
   const theme = useThemeStore((s) => s.theme);
   const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
+  useAutoUpdate();
 
   useEffect(() => {
     applyThemeToDocument(resolvedTheme);

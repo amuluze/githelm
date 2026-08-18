@@ -20,6 +20,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::projects::list_projects,
@@ -36,6 +37,9 @@ pub fn run() {
             commands::secrets::delete_secret,
             commands::secrets::has_secret,
             commands::app::get_app_version,
+            commands::updater::check_for_update,
+            commands::updater::install_update,
+            commands::updater::restart_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running githelm desktop");

@@ -93,3 +93,9 @@ export interface SecretRef {
   /** Key under which the credential is stored in OS keychain. */
   key: string;
 }
+
+export interface UpdateStatus {
+  currentVersion: string;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+}

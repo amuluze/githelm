@@ -72,6 +72,21 @@
   --th-status-error: #ef4444;
   --th-status-idle: #64748b;
 
+  /* Design tokens (githelm.pen) */
+  --th-bg-card: #ffffff;
+  --th-divider: #f0f0f0;
+  --th-text-strong: #2e2e2e;
+  --th-text-secondary: #6b6b6b;
+  --th-text-hint: #8a8a8a;
+  --th-success-fg: #059669;
+  --th-success-bg: rgba(16, 185, 129, 0.1);
+  --th-info-fg: #2563eb;
+  --th-info-bg: rgba(37, 99, 235, 0.1);
+  --th-orange-fg: #ea580c;
+  --th-orange-bg: rgba(249, 115, 22, 0.1);
+  --th-warning-fg: #d97706;
+  --th-warning-bg: #fef3c7;
+
   /* Window chrome */
   --th-titlebar-bg: rgba(255, 255, 255, 0.85);
   --th-titlebar-text: rgba(0, 0, 0, 0.85);
@@ -127,6 +142,20 @@
   --th-status-warning: #fbbf24;
   --th-status-error: #f87171;
   --th-status-idle: #94a3b8;
+
+  --th-bg-card: #141414;
+  --th-divider: rgba(255, 255, 255, 0.08);
+  --th-text-strong: rgba(255, 255, 255, 0.95);
+  --th-text-secondary: rgba(255, 255, 255, 0.7);
+  --th-text-hint: rgba(255, 255, 255, 0.5);
+  --th-success-fg: #34d399;
+  --th-success-bg: rgba(52, 211, 153, 0.15);
+  --th-info-fg: #60a5fa;
+  --th-info-bg: rgba(59, 130, 246, 0.15);
+  --th-orange-fg: #fb923c;
+  --th-orange-bg: rgba(251, 146, 60, 0.15);
+  --th-warning-fg: #fbbf24;
+  --th-warning-bg: rgba(251, 191, 36, 0.15);
 
   --th-titlebar-bg: rgba(20, 20, 20, 0.85);
   --th-titlebar-text: rgba(255, 255, 255, 0.90);

@@ -16,6 +16,7 @@ import type {
   Project,
   Server,
   TriggerDeploymentInput,
+  UpdateStatus,
 } from "@githelm/core";
 import {
   mockDeployments,
@@ -77,6 +78,12 @@ const fallback = async <T>(cmd: string, args?: Record<string, unknown>): Promise
       const logs = generateMockLogs();
       return (targetId ? logs.filter((l) => l.targetId === targetId) : logs) as unknown as T;
     }
+    case "check_for_update":
+      return {
+        currentVersion: "0.1.0",
+        latestVersion: null,
+        updateAvailable: false,
+      } as unknown as T;
     default:
       throw new ApiError(`Mock backend has no handler for "${cmd}"`, "NOT_MOCKED");
   }
@@ -118,4 +125,9 @@ export const api = {
 
   // ── App metadata ────────────────────────────────────────────────────
   getAppVersion: () => call<{ version: string; tauri: string }>("get_app_version"),
+
+  // ── App updates ────────────────────────────────────────────────────
+  checkForUpdate: () => call<UpdateStatus>("check_for_update"),
+  installUpdate: () => call<void>("install_update"),
+  restartApp: () => call<void>("restart_app"),
 };

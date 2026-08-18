@@ -4,3 +4,4 @@ pub mod logs;
 pub mod projects;
 pub mod secrets;
 pub mod servers;
+pub mod updater;

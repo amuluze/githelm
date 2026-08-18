@@ -69,8 +69,25 @@
   .th-text-subtle {
     color: var(--th-text-subtle);
   }
+  .th-text-strong {
+    color: var(--th-text-strong);
+  }
+  .th-text-secondary {
+    color: var(--th-text-secondary);
+  }
+  .th-text-hint {
+    color: var(--th-text-hint);
+  }
   .th-text-inverse {
     color: var(--th-text-inverse);
+  }
+
+  /* Design-token surfaces */
+  .th-bg-card {
+    background-color: var(--th-bg-card);
+  }
+  .th-bd-divider {
+    border-color: var(--th-divider);
   }
 
   /* Semantic backgrounds */
