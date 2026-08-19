@@ -1,10 +1,14 @@
 import { Outlet } from "react-router-dom";
 import { TitleBar } from "./TitleBar";
 import { Sidebar } from "./Sidebar";
-import { StatusBar } from "./StatusBar";
 
+/**
+ * Window shell per githelm.pen: 44px title bar on top, sidebar (232px,
+ * bg-card) on the left, page content (bg-page) filling the rest. The
+ * rounded window corners are applied to #root in globals.css.
+ */
 export const AppLayout = () => (
-  <div className="flex h-dvh flex-col th-bg-app">
+  <div className="th-bg-app flex h-dvh flex-col">
     <TitleBar />
     <div className="flex min-h-0 flex-1">
       <Sidebar />
@@ -12,7 +16,6 @@ export const AppLayout = () => (
         <div className="flex-1 overflow-auto">
           <Outlet />
         </div>
-        <StatusBar />
       </main>
     </div>
   </div>

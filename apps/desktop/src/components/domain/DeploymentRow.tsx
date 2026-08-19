@@ -4,12 +4,12 @@ import { formatDuration, formatRelativeTime, shortSha } from "@githelm/core";
 import { GitCommit } from "lucide-react";
 
 const STATUS_LABEL: Record<DeploymentStatus, string> = {
-  queued: "Queued",
-  building: "Building",
-  deploying: "Deploying",
-  live: "Live",
-  failed: "Failed",
-  "rolled-back": "Rolled back",
+  queued: "排队中",
+  building: "构建中",
+  deploying: "部署中",
+  live: "已上线",
+  failed: "失败",
+  "rolled-back": "已回滚",
 };
 
 const STATUS_VARIANT: Record<
@@ -30,17 +30,17 @@ export interface DeploymentRowProps {
 }
 
 export const DeploymentRow = ({ deployment, projectName }: DeploymentRowProps) => (
-  <div className="flex items-center gap-4 border-b th-bd-subtle px-4 py-3 last:border-b-0 hover:bg-[var(--th-sf-03)]">
-    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--th-sf-06)]">
-      <GitCommit className="h-3.5 w-3.5" />
+  <div className="flex items-center gap-4 border-b border-[var(--th-divider)] px-5 py-3 last:border-b-0 hover:bg-[var(--th-sf-03)]">
+    <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[var(--th-sf-05)]">
+      <GitCommit className="h-4 w-4 th-text-strong" />
     </div>
 
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-2">
-        <code className="rounded bg-[var(--th-sf-06)] px-1.5 py-0.5 text-[11px] font-mono">
+        <code className="rounded-md bg-[var(--th-on-05)] px-1.5 py-0.5 font-mono text-[11px] th-text-secondary">
           {shortSha(deployment.commitSha)}
         </code>
-        <span className="truncate text-sm font-medium th-text-title">
+        <span className="truncate text-sm th-text-strong">
           {deployment.commitMessage}
         </span>
       </div>
@@ -53,7 +53,7 @@ export const DeploymentRow = ({ deployment, projectName }: DeploymentRowProps) =
           </>
         )}
         <span aria-hidden>·</span>
-        <span>{formatRelativeTime(deployment.startedAt)}</span>
+        <span>{formatRelativeTime(deployment.startedAt, new Date(), "zh")}</span>
       </div>
     </div>
 

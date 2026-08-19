@@ -18,7 +18,7 @@ pub struct Project {
     pub provider: Provider,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProjectStatus {
     Running,
@@ -28,7 +28,7 @@ pub enum ProjectStatus {
     Idle,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Provider {
     Github,
@@ -51,7 +51,7 @@ pub struct Deployment {
     pub duration_ms: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DeploymentStatus {
     Queued,
@@ -75,14 +75,14 @@ pub struct Server {
     pub has_credential: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ServerKind {
     Ssh,
     Cloud,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ServerStatus {
     Online,
@@ -101,13 +101,43 @@ pub struct LogEntry {
     pub timestamp: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum LogLevel {
     Debug,
     Info,
     Warn,
     Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Issue {
+    pub id: String,
+    pub kind: IssueKind,
+    pub status: IssueStatus,
+    pub title: String,
+    pub description: String,
+    pub target_name: String,
+    pub detected_at: String,
+    pub resolved_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IssueStatus {
+    Open,
+    Resolved,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IssueKind {
+    Deployment,
+    Certificate,
+    Domain,
+    Version,
+    Port,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -141,4 +171,58 @@ pub struct ConnectionTestResult {
 pub struct AppVersion {
     pub version: String,
     pub tauri: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProjectInput {
+    pub name: String,
+    /// `owner/name` — URL forms are normalized before this is persisted.
+    pub repository: String,
+    pub branch: String,
+    pub provider: Provider,
+    pub url: Option<String>,
+}
+
+/// Mirror of @githelm/core GitRepo — a repository surfaced by the GitHub import.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRepo {
+    pub id: String,
+    pub owner: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub private: bool,
+    pub language: Option<String>,
+    pub language_color: Option<String>,
+    pub updated_at: String,
+    pub default_branch: String,
+    pub url: Option<String>,
+}
+
+/// Mirror of @githelm/core RepoAccount — the user plus the orgs their token
+/// can see, shown as filter chips in the library.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoAccount {
+    pub id: String,
+    pub login: String,
+    pub connected: bool,
+}
+
+/// Where the GitHub credential came from. A keychain PAT wins over the host's
+/// gh CLI login so an explicit user choice is always honored first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GithubTokenSource {
+    Token,
+    GhCli,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubStatus {
+    pub connected: bool,
+    pub login: Option<String>,
+    pub source: Option<GithubTokenSource>,
 }

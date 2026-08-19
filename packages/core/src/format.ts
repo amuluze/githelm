@@ -30,13 +30,17 @@ export const formatDuration = (ms: number | null): string => {
   return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`;
 };
 
-export const formatRelativeTime = (iso: string, now: Date = new Date()): string => {
+export const formatRelativeTime = (
+  iso: string,
+  now: Date = new Date(),
+  locale = "en",
+): string => {
   const then = new Date(iso);
   if (Number.isNaN(then.getTime())) return iso;
   const diffMs = now.getTime() - then.getTime();
   const diffSec = Math.round(diffMs / 1000);
 
-  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
   if (Math.abs(diffSec) < 60) return rtf.format(-diffSec, "second");
   const diffMin = Math.round(diffSec / 60);
   if (Math.abs(diffMin) < 60) return rtf.format(-diffMin, "minute");

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Pause, Play, Trash2 } from "lucide-react";
-import { Button, Card } from "@githelm/ui";
+import { Card } from "@githelm/ui";
 import { api } from "../lib/api";
 import { PageHeader } from "../components/domain/PageHeader";
 
@@ -52,39 +52,41 @@ export const LogsPage = () => {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader
-        title="Logs"
-        description="Real-time stream from local API and connected servers"
-        actions={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPaused((p) => !p)}
-            >
-              {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-              {paused ? "Resume" : "Pause"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => seen.current.clear()}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Clear
-            </Button>
-          </>
-        }
-      />
+      <div className="px-8 pt-8">
+        <PageHeader
+          title="审计日志"
+          description="本地 API 与已连接服务器的实时日志流"
+          actions={
+            <>
+              <button
+                type="button"
+                className="th-btn th-btn-secondary px-3.5"
+                onClick={() => setPaused((p) => !p)}
+              >
+                {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                {paused ? "恢复" : "暂停"}
+              </button>
+              <button
+                type="button"
+                className="th-btn th-btn-secondary px-3.5"
+                onClick={() => seen.current.clear()}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                清空
+              </button>
+            </>
+          }
+        />
+      </div>
 
-      <div className="flex min-h-0 flex-1 gap-4 p-6">
+      <div className="flex min-h-0 flex-1 gap-4 px-8 pb-8 pt-5">
         <aside className="w-56 shrink-0">
           <div className="mb-2 text-xs font-medium uppercase tracking-wider th-text-muted">
-            Sources
+            来源
           </div>
           <ul className="space-y-1">
             <SourceItem
-              label="All"
+              label="全部"
               active={activeTarget === null}
               onClick={() => setActiveTarget(null)}
             />
@@ -100,7 +102,7 @@ export const LogsPage = () => {
           </ul>
 
           <div className="mt-6 mb-2 text-xs font-medium uppercase tracking-wider th-text-muted">
-            Levels
+            级别
           </div>
           <div className="flex flex-wrap gap-1">
             {LEVELS.map((l) => {
@@ -150,7 +152,7 @@ export const LogsPage = () => {
             )}
             {visible.length === 0 && (
               <div className="py-12 text-center th-text-muted">
-                No log entries match the current filters.
+                没有符合当前筛选条件的日志。
               </div>
             )}
           </div>

@@ -28,6 +28,17 @@ keyring = "3"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "2"
+# SQLite persistence for projects/deployments/servers/logs/issues under ~/.githelm/.
+# "bundled" compiles SQLite in so no system library is required at runtime.
+rusqlite = { version = "0.37", features = ["bundled"] }
+dirs = "6"
+# GitHub REST client for the "import from GitHub" flow. Runs on the Rust side
+# so the renderer CSP can stay closed to the network.
+reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls"] }
+
+# NSWindow layer corner radius for the borderless macOS window.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
 
 [features]
 default = ["custom-protocol"]

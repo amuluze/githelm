@@ -5,8 +5,11 @@ import { OverviewPage } from "./routes/Overview";
 import { ProjectsPage } from "./routes/Projects";
 import { ProjectDetailPage } from "./routes/ProjectDetail";
 import { DeploymentsPage } from "./routes/Deployments";
+import { IssuesPage } from "./routes/Issues";
 import { ServersPage } from "./routes/Servers";
 import { LogsPage } from "./routes/Logs";
+import { LibraryPage } from "./routes/Library";
+import { ComingSoonPage } from "./routes/ComingSoon";
 import { SettingsPage } from "./routes/Settings";
 import { useThemeStore } from "./stores/theme";
 import { applyThemeToDocument } from "./lib/theme";
@@ -38,8 +41,13 @@ export const App = () => {
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
           <Route path="deployments" element={<DeploymentsPage />} />
+          <Route path="issues" element={<IssuesPage />} />
           <Route path="servers" element={<ServersPage />} />
           <Route path="logs" element={<LogsPage />} />
+          <Route path="library" element={<LibraryPage />} />
+          <Route path="email" element={<ComingSoonPage />} />
+          <Route path="tasks" element={<ComingSoonPage />} />
+          <Route path="backup" element={<ComingSoonPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

@@ -1,32 +1,29 @@
 use std::sync::{Arc, Mutex};
 
-use crate::mocks;
-use crate::types::{Deployment, LogEntry, Project, Server};
+use rusqlite::Connection;
 
-/// Application state shared across commands. In production this would hold
-/// a connection pool to the local API; for now it owns the in-memory mock
-/// datasets so commands can serve consistent data on every call.
+use crate::storage;
+
+/// Application state shared across commands: a single SQLite connection
+/// guarded by a mutex (desktop-scale load — one user, short queries). The
+/// database lives under `~/.githelm/` and is created on first launch.
 #[derive(Clone)]
 pub struct AppState {
-    pub inner: Arc<Inner>,
-}
-
-pub struct Inner {
-    pub projects: Vec<Project>,
-    pub deployments: Vec<Deployment>,
-    pub servers: Mutex<Vec<Server>>,
-    pub logs: Mutex<Vec<LogEntry>>,
+    pub db: Arc<Mutex<Connection>>,
 }
 
 impl AppState {
     pub fn new() -> Self {
+        let db = storage::open().unwrap_or_else(|err| {
+            panic!(
+                "cannot open the Githelm database at {}: {err}",
+                storage::db_path()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| "?".into())
+            );
+        });
         Self {
-            inner: Arc::new(Inner {
-                projects: mocks::projects(),
-                deployments: mocks::deployments(),
-                servers: Mutex::new(mocks::servers()),
-                logs: Mutex::new(mocks::logs()),
-            }),
+            db: Arc::new(Mutex::new(db)),
         }
     }
 }

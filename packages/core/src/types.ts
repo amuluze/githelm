@@ -12,6 +12,7 @@ export type DeploymentStatus =
   | "rolled-back";
 export type ServerKind = "ssh" | "cloud";
 export type ServerStatus = "online" | "offline" | "connecting" | "error";
+export type Provider = "github" | "gitlab" | "bitbucket" | "local";
 
 export interface Project {
   id: string;
@@ -28,7 +29,7 @@ export interface Project {
   /** Total deployments made. */
   deploymentCount: number;
   /** Git provider icon key. */
-  provider: "github" | "gitlab" | "bitbucket" | "local";
+  provider: Provider;
 }
 
 export interface Deployment {
@@ -66,6 +67,60 @@ export interface LogEntry {
   timestamp: string;
 }
 
+export type IssueStatus = "open" | "resolved";
+/** What the checker was looking at when it found the issue. */
+export type IssueKind =
+  | "deployment"
+  | "certificate"
+  | "domain"
+  | "version"
+  | "port";
+
+export interface Issue {
+  id: string;
+  kind: IssueKind;
+  status: IssueStatus;
+  title: string;
+  description: string;
+  /** Display name of the project / server / domain it is attached to. */
+  targetName: string;
+  /** ISO 8601 timestamps. */
+  detectedAt: string;
+  resolvedAt: string | null;
+}
+
+/** A Git repository surfaced by the "new project" library (GitHub tab). */
+export interface GitRepo {
+  id: string;
+  owner: string;
+  name: string;
+  description: string | null;
+  private: boolean;
+  /** Primary language label, e.g. "TypeScript". */
+  language: string | null;
+  /** CSS color for the language dot. */
+  languageColor: string | null;
+  updatedAt: string;
+  defaultBranch: string;
+  url: string | null;
+}
+
+/** An account the library can import repositories from. */
+export interface RepoAccount {
+  id: string;
+  login: string;
+  connected: boolean;
+}
+
+/** Where the GitHub credential came from ("token" = keychain PAT). */
+export type GithubTokenSource = "token" | "gh-cli";
+
+export interface GithubStatus {
+  connected: boolean;
+  login: string | null;
+  source: GithubTokenSource | null;
+}
+
 /* ─── Zod schemas (for forms) ──────────────────────────────────────────── */
 
 export const addServerSchema = z.object({
@@ -86,6 +141,17 @@ export const triggerDeploymentSchema = z.object({
 });
 
 export type TriggerDeploymentInput = z.infer<typeof triggerDeploymentSchema>;
+
+export const createProjectSchema = z.object({
+  name: z.string().min(1, "项目名称不能为空").max(60, "名称最长 60 个字符"),
+  /** `owner/name` — URL forms are normalized on the Rust side. */
+  repository: z.string().min(1, "仓库不能为空"),
+  branch: z.string().min(1, "分支不能为空"),
+  provider: z.enum(["github", "gitlab", "bitbucket", "local"]),
+  url: z.string().optional(),
+});
+
+export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 
 /* ─── IPC contract mirrors ──────────────────────────────────────────────── */
 

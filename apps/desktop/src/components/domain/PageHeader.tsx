@@ -4,16 +4,19 @@ interface PageHeaderProps {
   actions?: React.ReactNode;
 }
 
+/**
+ * Page header per githelm.pen: fs-4xl (24px) normal-weight title with
+ * -0.2px tracking, fs-sm (13px) muted subtitle, actions on the right.
+ * Pages place it inside their 32px content padding.
+ */
 export const PageHeader = ({ title, description, actions }: PageHeaderProps) => (
-  <div className="flex items-start justify-between gap-4 border-b th-bd-subtle px-6 py-5">
-    <div>
-      <h1 className="text-xl font-semibold tracking-tight th-text-title">
+  <div className="flex items-center justify-between gap-4">
+    <div className="flex flex-col gap-1">
+      <h1 className="text-2xl font-normal leading-tight tracking-[-0.2px] th-text-strong">
         {title}
       </h1>
-      {description && (
-        <p className="mt-1 text-sm th-text-muted">{description}</p>
-      )}
+      {description && <p className="text-[13px] th-text-muted">{description}</p>}
     </div>
-    {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+    {actions && <div className="flex shrink-0 items-center gap-2.5">{actions}</div>}
   </div>
 );

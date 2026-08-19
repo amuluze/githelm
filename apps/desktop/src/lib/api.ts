@@ -11,15 +11,21 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AddServerInput,
+  CreateProjectInput,
   Deployment,
+  GithubStatus,
+  Issue,
   LogEntry,
   Project,
+  RepoAccount,
+  GitRepo,
   Server,
   TriggerDeploymentInput,
   UpdateStatus,
 } from "@githelm/core";
 import {
   mockDeployments,
+  mockIssues,
   mockProjects,
   mockServers,
   generateMockLogs,
@@ -73,6 +79,8 @@ const fallback = async <T>(cmd: string, args?: Record<string, unknown>): Promise
     }
     case "list_servers":
       return mockServers as unknown as T;
+    case "list_issues":
+      return mockIssues as unknown as T;
     case "list_logs": {
       const targetId = args?.targetId as string | undefined;
       const logs = generateMockLogs();
@@ -84,6 +92,12 @@ const fallback = async <T>(cmd: string, args?: Record<string, unknown>): Promise
         latestVersion: null,
         updateAvailable: false,
       } as unknown as T;
+    case "github_status":
+      // Browser dev has no keychain / gh CLI — show the connect card.
+      return { connected: false, login: null, source: null } as unknown as T;
+    case "list_repo_accounts":
+    case "list_github_repos":
+      return [] as unknown as T;
     default:
       throw new ApiError(`Mock backend has no handler for "${cmd}"`, "NOT_MOCKED");
   }
@@ -93,6 +107,8 @@ export const api = {
   // ── Projects ─────────────────────────────────────────────────────────
   listProjects: () => call<Project[]>("list_projects"),
   getProject: (id: string) => call<Project | null>("get_project", { id }),
+  createProject: (input: CreateProjectInput) =>
+    call<Project>("create_project", { input }),
 
   // ── Deployments ──────────────────────────────────────────────────────
   listDeployments: (projectId?: string) =>
@@ -108,6 +124,20 @@ export const api = {
   removeServer: (id: string) => call<void>("remove_server", { id }),
   testServerConnection: (id: string) =>
     call<{ ok: boolean; latencyMs: number }>("test_server_connection", { id }),
+
+  // ── Issues (background checker) ─────────────────────────────────────
+  listIssues: () => call<Issue[]>("list_issues"),
+
+  // ── GitHub import ────────────────────────────────────────────────────
+  githubStatus: () => call<GithubStatus>("github_status"),
+  saveGithubToken: (token: string) =>
+    call<GithubStatus>("save_github_token", { token }),
+  clearGithubToken: () => call<GithubStatus>("clear_github_token"),
+  listRepoAccounts: () => call<RepoAccount[]>("list_repo_accounts"),
+  listGithubRepos: (owner?: string) =>
+    call<GitRepo[]>("list_github_repos", { owner: owner ?? null }),
+  listGithubBranches: (owner: string, repo: string) =>
+    call<string[]>("list_github_branches", { owner, repo }),
 
   // ── Logs ──────────────────────────────────────────────────────────────
   listLogs: (targetId?: string, limit = 100) =>

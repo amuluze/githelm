@@ -8,7 +8,6 @@ import {
   Rocket,
 } from "lucide-react";
 import {
-  Button,
   Card,
   CardContent,
   CardDescription,
@@ -17,9 +16,18 @@ import {
   StatusDot,
 } from "@githelm/ui";
 import { formatDuration } from "@githelm/core";
+import type { Project } from "@githelm/core";
 import { api } from "../lib/api";
 import { PageHeader } from "../components/domain/PageHeader";
 import { DeploymentRow } from "../components/domain/DeploymentRow";
+
+const STATUS_LABEL: Record<Project["status"], string> = {
+  running: "运行中",
+  stopped: "已停止",
+  building: "构建中",
+  error: "异常",
+  idle: "空闲",
+};
 
 export const ProjectDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -40,7 +48,7 @@ export const ProjectDetailPage = () => {
   if (project.isLoading) {
     return (
       <div className="flex h-48 items-center justify-center text-sm th-text-muted">
-        Loading project…
+        加载项目中…
       </div>
     );
   }
@@ -48,9 +56,9 @@ export const ProjectDetailPage = () => {
   if (!project.data) {
     return (
       <div className="flex h-48 flex-col items-center justify-center gap-2">
-        <p className="text-sm th-text-muted">Project not found.</p>
+        <p className="text-sm th-text-muted">未找到该项目。</p>
         <Link to="/projects" className="th-link text-xs">
-          ← Back to projects
+          ← 返回项目列表
         </Link>
       </div>
     );
@@ -62,37 +70,39 @@ export const ProjectDetailPage = () => {
   );
 
   return (
-    <div>
-      <PageHeader
-        title={p.name}
-        description={`${p.repository} · ${p.branch}`}
-        actions={
-          <>
-            {p.url && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  window.open(p.url!, "_blank", "noopener,noreferrer")
-                }
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                Visit
-              </Button>
-            )}
-            <Button size="sm">
-              <Rocket className="h-4 w-4" />
-              Deploy
-            </Button>
-          </>
-        }
-      />
+    <div className="flex h-full flex-col">
+      <div className="px-8 pt-8">
+        <PageHeader
+          title={p.name}
+          description={`${p.repository} · ${p.branch}`}
+          actions={
+            <>
+              {p.url && (
+                <button
+                  type="button"
+                  className="th-btn th-btn-secondary px-3.5"
+                  onClick={() =>
+                    window.open(p.url!, "_blank", "noopener,noreferrer")
+                  }
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  访问
+                </button>
+              )}
+              <button type="button" className="th-btn th-btn-primary">
+                <Rocket className="h-3.5 w-3.5" />
+                部署
+              </button>
+            </>
+          }
+        />
+      </div>
 
-      <div className="space-y-6 p-6">
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-8 pb-8 pt-5">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <Card>
             <CardHeader>
-              <CardDescription>Status</CardDescription>
+              <CardDescription>状态</CardDescription>
               <CardTitle className="flex items-center gap-2 capitalize">
                 <StatusDot
                   status={
@@ -103,7 +113,7 @@ export const ProjectDetailPage = () => {
                         : "idle"
                   }
                 />
-                {p.status}
+                {STATUS_LABEL[p.status]}
               </CardTitle>
             </CardHeader>
             <CardContent className="flex items-center gap-2 text-xs th-text-muted">
@@ -117,25 +127,25 @@ export const ProjectDetailPage = () => {
 
           <Card>
             <CardHeader>
-              <CardDescription>Latest deployment</CardDescription>
+              <CardDescription>最近部署</CardDescription>
               <CardTitle>
-                {liveDeployment ? "Live" : "No live deployment"}
+                {liveDeployment ? "已上线" : "暂无在线部署"}
               </CardTitle>
             </CardHeader>
             <CardContent className="text-xs th-text-muted">
               {liveDeployment
-                ? `Built in ${formatDuration(liveDeployment.durationMs)}`
-                : "Trigger a deployment to publish this project."}
+                ? `构建用时 ${formatDuration(liveDeployment.durationMs)}`
+                : "触发一次部署以发布该项目。"}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardDescription>Total deployments</CardDescription>
+              <CardDescription>部署总数</CardDescription>
               <CardTitle className="text-2xl">{p.deploymentCount}</CardTitle>
             </CardHeader>
             <CardContent className="text-xs th-text-muted">
-              {deployments.data?.length ?? 0} shown on this page
+              本页展示 {deployments.data?.length ?? 0} 条
             </CardContent>
           </Card>
         </div>
@@ -143,17 +153,17 @@ export const ProjectDetailPage = () => {
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wider th-text-muted">
-              Deployments
+              部署记录
             </h2>
             <Link to="/deployments" className="th-link text-xs">
-              View all →
+              查看全部 →
             </Link>
           </div>
           <Card className="overflow-hidden p-0">
             <CardContent className="p-0">
               {(deployments.data ?? []).length === 0 ? (
                 <div className="px-4 py-12 text-center text-sm th-text-muted">
-                  No deployments yet.
+                  暂无部署记录。
                 </div>
               ) : (
                 (deployments.data ?? []).map((d) => (
@@ -174,7 +184,7 @@ export const ProjectDetailPage = () => {
             className="inline-flex items-center gap-1 text-xs th-text-muted hover:th-text-title"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back to projects
+            返回项目列表
           </Link>
         </div>
       </div>

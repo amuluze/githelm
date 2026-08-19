@@ -1,5 +1,7 @@
 pub mod app;
 pub mod deployments;
+pub mod github;
+pub mod issues;
 pub mod logs;
 pub mod projects;
 pub mod secrets;

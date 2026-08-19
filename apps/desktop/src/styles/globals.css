@@ -9,6 +9,11 @@
     box-sizing: border-box;
   }
 
+  /*
+   * Frameless window (decorations: false). The real rounded corners are
+   * applied natively to the NSWindow layer on the Rust side, so the page
+   * paints an opaque background edge to edge.
+   */
   html,
   body,
   #root {
@@ -17,21 +22,19 @@
     padding: 0;
   }
 
-  html {
+  html,
+  body {
     background-color: var(--th-bg-app);
+  }
+
+  html {
     color: var(--th-text-body);
     color-scheme: light dark;
-    font-family:
-      -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
-      Helvetica, Arial, sans-serif;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+      "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-  }
-
-  body {
-    background-color: var(--th-bg-app);
-    overflow: hidden;
   }
 
   button {
@@ -86,8 +89,14 @@
   .th-bg-card {
     background-color: var(--th-bg-card);
   }
+  .th-bg-card-2 {
+    background-color: var(--th-bg-card-2);
+  }
   .th-bd-divider {
     border-color: var(--th-divider);
+  }
+  .th-bd-default {
+    border-color: var(--th-border-default);
   }
 
   /* Semantic backgrounds */
@@ -105,15 +114,15 @@
   .th-bd-subtle {
     border-color: var(--th-bd-subtle);
   }
-  .th-bd-default {
-    border-color: var(--th-bd-default);
+  .th-bd-input {
+    border-color: var(--th-border-input);
   }
 
-  /* Card chrome */
+  /* Card chrome — githelm.pen: $bg-card + $divider stroke + $r16 */
   .th-card {
-    background-color: var(--th-bg-elevated);
-    border: 1px solid var(--th-bd-subtle);
-    border-radius: 0.5rem;
+    background-color: var(--th-bg-card);
+    border: 1px solid var(--th-divider);
+    border-radius: 16px;
   }
 
   /* Inline link styling */
@@ -124,6 +133,47 @@
   .th-link:hover {
     color: var(--th-accent-hover);
     text-decoration: underline;
+  }
+
+  /* Buttons — githelm.pen: r10, padding [9–10, 14–18], fs-md, icon 14 */
+  .th-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 10px;
+    padding: 9px 16px;
+    font-size: 14px;
+    font-weight: normal;
+    line-height: 1.2;
+    border: none;
+    transition: background-color 0.15s, border-color 0.15s, opacity 0.15s;
+  }
+  .th-btn-primary {
+    background-color: var(--th-accent);
+    color: var(--th-on-accent);
+  }
+  .th-btn-primary:hover {
+    background-color: var(--th-accent-hover);
+  }
+  .th-btn-secondary {
+    background-color: var(--th-bg-card);
+    color: var(--th-text-strong);
+    border: 1px solid var(--th-border-default);
+  }
+  .th-btn-secondary:hover {
+    background-color: var(--th-bg-hover);
+  }
+  .th-btn-soft {
+    background-color: var(--th-on-05);
+    color: var(--th-text-strong);
+  }
+  .th-btn-soft:hover {
+    background-color: var(--th-on-08);
+  }
+  .th-btn:disabled {
+    opacity: 0.5;
+    pointer-events: none;
   }
 
   /* Drag region for the title bar on macOS */
@@ -137,11 +187,11 @@
   /* Reusable form input chrome */
   .th-input {
     width: 100%;
-    border-radius: 0.375rem;
-    border: 1px solid var(--th-bd-default);
-    background-color: var(--th-bg-app);
-    padding: 0.4375rem 0.625rem;
-    font-size: 0.8125rem;
+    border-radius: 10px;
+    border: 1px solid var(--th-border-input);
+    background-color: var(--th-bg-card);
+    padding: 9px 12px;
+    font-size: 13px;
     color: var(--th-text-title);
     transition: border-color 0.15s, box-shadow 0.15s;
   }
