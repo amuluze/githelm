@@ -148,6 +148,20 @@ export const addServerSchema = z.object({
 
 export type AddServerInput = z.infer<typeof addServerSchema>;
 
+/** Edits an existing server; `credential` blank = keep the stored one. */
+export const updateServerSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1, "Name is required").max(60),
+  host: z.string().min(1, "Host is required"),
+  kind: z.enum(["ssh", "cloud"]),
+  region: z.string().optional(),
+  username: z.string().min(1, "Username is required"),
+  port: z.coerce.number().int().min(1).max(65535).default(22),
+  credential: z.string().optional(),
+});
+
+export type UpdateServerInput = z.infer<typeof updateServerSchema>;
+
 /** Deploy pipeline config — every field optional until the user fills it. */
 export const projectConfigSchema = z.object({
   projectId: z.string().min(1),

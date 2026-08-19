@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, ExternalLink, Plus, Server, X } from "lucide-react";
 import { toast } from "sonner";
-import type { AddServerInput } from "@githelm/core";
-import { addServerSchema } from "@githelm/core";
+import type { AddServerInput, Server as ServerModel, UpdateServerInput } from "@githelm/core";
+import { addServerSchema, updateServerSchema } from "@githelm/core";
 import { api, ApiError } from "../lib/api";
 import { PageHeader } from "../components/domain/PageHeader";
 import { ServerRow } from "../components/domain/ServerRow";
@@ -14,6 +14,7 @@ import { ServerStackIllustration } from "../components/domain/Illustrations";
 export const ServersPage = () => {
   const queryClient = useQueryClient();
   const [showDialog, setShowDialog] = useState(false);
+  const [editing, setEditing] = useState<ServerModel | null>(null);
 
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.listServers });
 
@@ -25,6 +26,17 @@ export const ServersPage = () => {
     },
     onError: (err) =>
       toast.error(err instanceof ApiError ? err.message : "移除服务器失败"),
+  });
+
+  const edited = useMutation({
+    mutationFn: api.updateServer,
+    onSuccess: () => {
+      setEditing(null);
+      void queryClient.invalidateQueries({ queryKey: ["servers"] });
+      toast.success("服务器已更新");
+    },
+    onError: (err) =>
+      toast.error(err instanceof ApiError ? err.message : "更新服务器失败"),
   });
 
   return (
@@ -70,6 +82,7 @@ export const ServersPage = () => {
                 key={s.id}
                 server={s}
                 onRemove={(id) => remove.mutate(id)}
+                onEdit={(server) => setEditing(server)}
               />
             ))}
           </section>
@@ -86,6 +99,136 @@ export const ServersPage = () => {
           }}
         />
       )}
+
+      {editing && (
+        <EditServerDialog
+          server={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(input) => edited.mutate(input)}
+        />
+      )}
+    </div>
+  );
+};
+
+/** Edits connection details — the fix for "SSH 连接失败" with stale
+ *  username/port/host. Credential blank keeps the stored keychain entry. */
+const EditServerDialog = ({
+  server,
+  onClose,
+  onSaved,
+}: {
+  server: ServerModel;
+  onClose: () => void;
+  onSaved: (input: UpdateServerInput) => void;
+}) => {
+  const [form, setForm] = useState<UpdateServerInput>({
+    id: server.id,
+    name: server.name,
+    host: server.host,
+    kind: server.kind,
+    region: server.region ?? "",
+    username: server.username ?? "root",
+    port: server.port,
+    credential: "",
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsed = updateServerSchema.safeParse(form);
+    if (!parsed.success) {
+      const fieldErrors: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path[0];
+        if (typeof key === "string") fieldErrors[key] = issue.message;
+      }
+      setErrors(fieldErrors);
+      return;
+    }
+    setErrors({});
+    onSaved(parsed.data);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      role="dialog"
+      aria-modal
+    >
+      <form onSubmit={submit} className="th-card w-full max-w-md p-5 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold th-text-title">编辑服务器</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭"
+            className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-[var(--th-sf-06)]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <Field label="名称" error={errors.name}>
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="th-input"
+            />
+          </Field>
+
+          <Field label="主机" error={errors.host}>
+            <input
+              value={form.host}
+              onChange={(e) => setForm({ ...form, host: e.target.value })}
+              placeholder="203.0.113.42 或 host.example.com"
+              className="th-input"
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="用户名" error={errors.username}>
+              <input
+                value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                className="th-input"
+              />
+            </Field>
+            <Field label="SSH 端口" error={errors.port}>
+              <input
+                type="number"
+                value={form.port}
+                onChange={(e) =>
+                  setForm({ ...form, port: Number(e.target.value) || 22 })
+                }
+                className="th-input"
+              />
+            </Field>
+          </div>
+
+          <Field label="凭据（留空则保留已保存的）" error={errors.credential}>
+            <input
+              type="password"
+              value={form.credential ?? ""}
+              onChange={(e) =>
+                setForm({ ...form, credential: e.target.value })
+              }
+              placeholder="不修改请留空"
+              className="th-input"
+            />
+          </Field>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="th-btn th-btn-soft px-3.5">
+            取消
+          </button>
+          <button type="submit" className="th-btn th-btn-primary px-4">
+            保存
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

@@ -22,6 +22,7 @@ import type {
   Server,
   ServerDirListing,
   UpdateProjectConfigInput,
+  UpdateServerInput,
   UpdateStatus,
 } from "@githelm/core";
 import {
@@ -127,6 +128,8 @@ export const api = {
   // ── Servers ──────────────────────────────────────────────────────────
   listServers: () => call<Server[]>("list_servers"),
   addServer: (input: AddServerInput) => call<Server>("add_server", { input }),
+  updateServer: (input: UpdateServerInput) =>
+    call<Server>("update_server", { input }),
   removeServer: (id: string) => call<void>("remove_server", { id }),
   testServerConnection: (id: string) =>
     call<{ ok: boolean; latencyMs: number }>("test_server_connection", { id }),

@@ -171,6 +171,22 @@ fn default_ssh_port() -> u16 {
     22
 }
 
+/// Updates an existing server's connection details. `credential` is
+/// optional — when provided it replaces the keychain entry.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateServerInput {
+    pub id: String,
+    pub name: String,
+    pub host: String,
+    pub kind: ServerKind,
+    pub region: Option<String>,
+    pub username: String,
+    #[serde(default = "default_ssh_port")]
+    pub port: u16,
+    pub credential: Option<String>,
+}
+
 /// Saves a project's deploy pipeline config (local path, target server,
 /// deploy dir, build / update commands). Fields left empty are cleared.
 #[derive(Debug, Clone, Deserialize)]

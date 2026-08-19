@@ -134,6 +134,7 @@ pub fn run() {
             commands::deployments::deploy_project,
             commands::servers::list_servers,
             commands::servers::add_server,
+            commands::servers::update_server,
             commands::servers::remove_server,
             commands::servers::test_server_connection,
             commands::servers::list_server_dir,

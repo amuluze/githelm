@@ -38,9 +38,10 @@ dirs = "6"
 # GitHub REST client for the "import from GitHub" flow. Runs on the Rust side
 # so the renderer CSP can stay closed to the network.
 reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls"] }
-# PTY for the SSH terminal page: spawns the system `ssh` in a pseudo-terminal
-# so auth prompts (password, host-key) stay interactive inside xterm.
-portable-pty = "0.8"
+# PTY for the SSH terminal page (openpty + winsize ioctls). The ssh process
+# itself is spawned via std Command stdio fds, which keeps it on posix_spawn —
+# forking this process aborts under WKWebView on macOS.
+libc = "0.2"
 # Terminal output is a raw byte stream; base64 keeps it intact across events
 # even when UTF-8 sequences split across read chunks.
 base64 = "0.22"

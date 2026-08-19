@@ -10,6 +10,7 @@ use crate::state::AppState;
 use crate::storage;
 use crate::types::{
     AddServerInput, ConnectionTestResult, Server, ServerDirEntry, ServerDirListing, ServerStatus,
+    UpdateServerInput,
 };
 
 const SERVICE: &str = "io.githelm.desktop";
@@ -68,6 +69,52 @@ pub fn add_server(state: State<'_, AppState>, input: AddServerInput) -> AppResul
     let conn = state.db.lock().expect("db mutex");
     storage::insert_server(&conn, &server)?;
     Ok(server)
+}
+
+#[tauri::command]
+pub fn update_server(state: State<'_, AppState>, input: UpdateServerInput) -> AppResult<Server> {
+    if input.name.trim().is_empty() {
+        return Err(AppError::Validation("名称不能为空".into()));
+    }
+    if input.host.trim().is_empty() {
+        return Err(AppError::Validation("主机不能为空".into()));
+    }
+    if input.username.trim().is_empty() {
+        return Err(AppError::Validation("用户名不能为空".into()));
+    }
+
+    {
+        let conn = state.db.lock().expect("db mutex");
+        if storage::get_server(&conn, &input.id)?.is_none() {
+            return Err(AppError::NotFound(format!("server {}", input.id)));
+        }
+        let updated = Server {
+            id: input.id.clone(),
+            name: input.name,
+            host: input.host,
+            kind: input.kind,
+            region: input.region.filter(|r| !r.is_empty()),
+            status: ServerStatus::Connecting,
+            last_seen_at: chrono::Utc::now().to_rfc3339(),
+            has_credential: true,
+            username: Some(input.username),
+            port: input.port,
+        };
+        storage::update_server(&conn, &updated)?;
+    }
+
+    // Replace the keychain credential when the user typed a new one.
+    if let Some(credential) = input.credential.filter(|c| !c.trim().is_empty()) {
+        let entry = Entry::new(SERVICE, &server_credential_key(&input.id))
+            .map_err(|e| AppError::Internal(format!("keyring: {e}")))?;
+        entry
+            .set_password(credential.trim())
+            .map_err(|e| AppError::Internal(format!("keyring set: {e}")))?;
+    }
+
+    let conn = state.db.lock().expect("db mutex");
+    storage::get_server(&conn, &input.id)?
+        .ok_or_else(|| AppError::NotFound(format!("server {}", input.id)))
 }
 
 #[tauri::command]

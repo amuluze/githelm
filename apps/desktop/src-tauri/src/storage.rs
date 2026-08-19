@@ -479,6 +479,26 @@ pub fn delete_server(conn: &Connection, id: &str) -> AppResult<bool> {
     Ok(affected > 0)
 }
 
+pub fn update_server(conn: &Connection, s: &Server) -> AppResult<bool> {
+    let affected = conn
+        .execute(
+            "UPDATE servers
+             SET name = ?2, kind = ?3, host = ?4, region = ?5, username = ?9, port = ?10
+             WHERE id = ?1",
+            params![
+                s.id,
+                s.name,
+                enum_to_str(&s.kind)?,
+                s.host,
+                s.region,
+                s.username,
+                s.port,
+            ],
+        )
+        .map_err(sql_err("update server"))?;
+    Ok(affected > 0)
+}
+
 /// Detaches projects that targeted this server so their next deploy prompts
 /// for a new target instead of failing on a dangling id.
 pub fn clear_project_server(conn: &Connection, server_id: &str) -> AppResult<()> {

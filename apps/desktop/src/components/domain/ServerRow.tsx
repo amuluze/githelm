@@ -9,6 +9,7 @@ import {
   Activity,
   Cloud,
   Loader2,
+  Pencil,
   Server as ServerIcon,
   SquareTerminal,
   Terminal,
@@ -41,9 +42,11 @@ const STATUS_LABEL: Record<ServerStatus, string> = {
 export interface ServerRowProps {
   server: ServerModel;
   onRemove?: (id: string) => void;
+  /** Opens the edit dialog — fixes connection details (user/host/port). */
+  onEdit?: (server: ServerModel) => void;
 }
 
-export const ServerRow = ({ server, onRemove }: ServerRowProps) => {
+export const ServerRow = ({ server, onRemove, onEdit }: ServerRowProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const Icon = KIND_ICON[server.kind];
@@ -140,6 +143,18 @@ export const ServerRow = ({ server, onRemove }: ServerRowProps) => {
         >
           <SquareTerminal className="h-3.5 w-3.5" />
         </button>
+
+        {onEdit && (
+          <button
+            type="button"
+            onClick={() => onEdit(server)}
+            title="编辑服务器"
+            aria-label={`编辑 ${server.name}`}
+            className="th-text-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--th-sf-04)] hover:th-text-strong"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
 
         <button
           type="button"
