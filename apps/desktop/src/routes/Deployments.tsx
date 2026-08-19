@@ -1,11 +1,24 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Activity as ActivityIcon, Check, ChevronDown, Layers, Plus, Rocket, Search, X, Zap } from "lucide-react";
-import type { DeploymentStatus } from "@githelm/core";
+import {
+  Activity as ActivityIcon,
+  Check,
+  ChevronDown,
+  Folder,
+  Layers,
+  Plus,
+  Rocket,
+  Search,
+  X,
+  Zap,
+} from "lucide-react";
+import type { Deployment, DeploymentStatus, Project } from "@githelm/core";
 import { api } from "../lib/api";
 import { PageHeader } from "../components/domain/PageHeader";
 import { DeploymentRow } from "../components/domain/DeploymentRow";
+import { DeployDialog } from "../components/domain/DeployDialog";
+import { DeploymentLogsDialog } from "../components/domain/DeploymentLogsDialog";
 import { WindowIllustration } from "../components/domain/Illustrations";
 
 /** deployments-mock in githelm.pen: toolbar + list card + overview rail. */
@@ -21,16 +34,26 @@ const TABS: Array<{ key: StatusTab; label: string }> = [
 ];
 
 export const DeploymentsPage = () => {
-  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const deployments = useQuery({
     queryKey: ["deployments"],
     queryFn: () => api.listDeployments(undefined),
+    // Follow running pipelines in the list badges.
+    refetchInterval: (query) =>
+      query.state.data?.some(
+        (d) => d.status === "building" || d.status === "deploying",
+      )
+        ? 2000
+        : false,
   });
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.listProjects });
 
   const [search, setSearch] = useState("");
   const [project, setProject] = useState<string>("all");
   const [tab, setTab] = useState<StatusTab>("all");
+  const [picking, setPicking] = useState(false);
+  const [deployProject, setDeployProject] = useState<Project | null>(null);
+  const [logDeploymentId, setLogDeploymentId] = useState<string | null>(null);
 
   const projectById = useMemo(
     () => new Map((projects.data ?? []).map((p) => [p.id, p])),
@@ -65,6 +88,16 @@ export const DeploymentsPage = () => {
         <PageHeader
           title="部署"
           description={`${projectCount} 个项目共 ${all.length} 次`}
+          actions={
+            <button
+              type="button"
+              className="th-btn th-btn-primary"
+              onClick={() => setPicking(true)}
+            >
+              <Rocket className="h-3.5 w-3.5" />
+              部署
+            </button>
+          }
         />
       </div>
 
@@ -123,13 +156,14 @@ export const DeploymentsPage = () => {
                 加载中…
               </div>
             ) : visible.length === 0 ? (
-              <DeploymentsEmpty />
+              <DeploymentsEmpty onDeploy={() => setPicking(true)} />
             ) : (
               visible.map((d) => (
                 <DeploymentRow
                   key={d.id}
                   deployment={d}
                   projectName={projectById.get(d.projectId)?.name}
+                  onOpen={(dep: Deployment) => setLogDeploymentId(dep.id)}
                 />
               ))
             )}
@@ -170,11 +204,11 @@ export const DeploymentsPage = () => {
                 <h2 className="text-sm th-text-strong">开始使用</h2>
               </div>
               <p className="text-[13px] leading-[1.5] th-text-secondary">
-                导入 Git 仓库或使用模板来创建你的第一次部署。
+                选择一个项目，配置本地构建与服务器目录后即可发布。
               </p>
               <button
                 type="button"
-                onClick={() => navigate("/library")}
+                onClick={() => setPicking(true)}
                 className="text-left text-[13px] th-text-strong hover:opacity-80"
               >
                 部署项目 →
@@ -182,6 +216,115 @@ export const DeploymentsPage = () => {
             </section>
           </aside>
         </div>
+      </div>
+
+      {picking && (
+        <ProjectPicker
+          projects={projects.data ?? []}
+          onClose={() => setPicking(false)}
+          onPick={(p) => {
+            setPicking(false);
+            setDeployProject(p);
+          }}
+        />
+      )}
+
+      {deployProject && (
+        <DeployDialog
+          project={deployProject}
+          onClose={() => setDeployProject(null)}
+          onStarted={(dep) => {
+            setDeployProject(null);
+            void queryClient.invalidateQueries({ queryKey: ["deployments"] });
+            void queryClient.invalidateQueries({ queryKey: ["projects"] });
+            setLogDeploymentId(dep.id);
+          }}
+        />
+      )}
+
+      {logDeploymentId && (
+        <DeploymentLogsDialog
+          deploymentId={logDeploymentId}
+          onClose={() => {
+            setLogDeploymentId(null);
+            void queryClient.invalidateQueries({ queryKey: ["deployments"] });
+            void queryClient.invalidateQueries({ queryKey: ["projects"] });
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+/** Step one of deploying from this page: which project. */
+const ProjectPicker = ({
+  projects,
+  onClose,
+  onPick,
+}: {
+  projects: Project[];
+  onClose: () => void;
+  onPick: (project: Project) => void;
+}) => {
+  const navigate = useNavigate();
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      role="dialog"
+      aria-modal
+    >
+      <div className="th-card flex max-h-[70vh] w-full max-w-md flex-col p-5 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold th-text-title">选择要部署的项目</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭"
+            className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-[var(--th-sf-06)]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {projects.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <p className="text-sm th-text-muted">还没有项目</p>
+            <button
+              type="button"
+              onClick={() => navigate("/library")}
+              className="th-btn th-btn-primary px-4"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              导入项目
+            </button>
+          </div>
+        ) : (
+          <div className="th-bg-inset flex-1 overflow-y-auto rounded-xl">
+            {projects.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onPick(p)}
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--th-sf-03)]"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--th-sf-05)]">
+                  <Folder className="h-4 w-4 th-text-strong" />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm th-text-strong">{p.name}</span>
+                  <span className="truncate text-xs th-text-muted">
+                    {p.repository} · {p.branch}
+                  </span>
+                </span>
+                {p.deploymentCount > 0 && (
+                  <span className="shrink-0 text-xs th-text-muted">
+                    {p.deploymentCount} 次部署
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -213,8 +356,7 @@ const StatRow = ({
   </div>
 );
 
-const DeploymentsEmpty = () => {
-  const navigate = useNavigate();
+const DeploymentsEmpty = ({ onDeploy }: { onDeploy: () => void }) => {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3.5 p-6">
       <WindowIllustration />
@@ -225,10 +367,10 @@ const DeploymentsEmpty = () => {
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => navigate("/library")}
+          onClick={onDeploy}
           className="th-btn th-btn-primary px-[18px] py-2.5"
         >
-          <Plus className="h-3.5 w-3.5" />
+          <Rocket className="h-3.5 w-3.5" />
           部署项目
         </button>
         <button type="button" className="th-btn th-btn-soft px-[18px] py-2.5">

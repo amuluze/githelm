@@ -7,6 +7,7 @@ import { ProjectDetailPage } from "./routes/ProjectDetail";
 import { DeploymentsPage } from "./routes/Deployments";
 import { IssuesPage } from "./routes/Issues";
 import { ServersPage } from "./routes/Servers";
+import { TerminalPage } from "./routes/Terminal";
 import { LogsPage } from "./routes/Logs";
 import { LibraryPage } from "./routes/Library";
 import { ComingSoonPage } from "./routes/ComingSoon";
@@ -43,6 +44,8 @@ export const App = () => {
           <Route path="deployments" element={<DeploymentsPage />} />
           <Route path="issues" element={<IssuesPage />} />
           <Route path="servers" element={<ServersPage />} />
+          <Route path="terminal" element={<TerminalPage />} />
+          <Route path="terminal/:serverId" element={<TerminalPage />} />
           <Route path="logs" element={<LogsPage />} />
           <Route path="library" element={<LibraryPage />} />
           <Route path="email" element={<ComingSoonPage />} />

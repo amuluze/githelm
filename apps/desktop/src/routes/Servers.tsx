@@ -125,6 +125,7 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
     region: "",
     username: "root",
     credential: "",
+    port: 22,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -213,13 +214,25 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
             </Field>
           </div>
 
-          <Field label="用户名" error={errors.username}>
-            <input
-              value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })}
-              className="th-input"
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="用户名" error={errors.username}>
+              <input
+                value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                className="th-input"
+              />
+            </Field>
+            <Field label="SSH 端口" error={errors.port}>
+              <input
+                type="number"
+                value={form.port}
+                onChange={(e) =>
+                  setForm({ ...form, port: Number(e.target.value) || 22 })
+                }
+                className="th-input"
+              />
+            </Field>
+          </div>
 
           <Field label="凭据(密钥或密码)" error={errors.credential}>
             <input

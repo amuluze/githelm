@@ -50,26 +50,49 @@ struct GhError {
 }
 
 fn keychain_token() -> Option<String> {
-    let entry = Entry::new(SERVICE, GITHUB_TOKEN_KEY).ok()?;
-    entry
-        .get_password()
-        .ok()
-        .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty())
+    let entry = match Entry::new(SERVICE, GITHUB_TOKEN_KEY) {
+        Ok(entry) => entry,
+        Err(err) => {
+            eprintln!("[githelm] keychain entry: {err}");
+            return None;
+        }
+    };
+    match entry.get_password() {
+        Ok(token) => {
+            let token = token.trim().to_string();
+            (!token.is_empty()).then_some(token)
+        }
+        Err(keyring::Error::NoEntry) => None,
+        Err(err) => {
+            eprintln!("[githelm] keychain read: {err}");
+            None
+        }
+    }
 }
 
 /// `gh auth token` prints the host's gh CLI login, if any. Fails quietly —
 /// a missing or logged-out gh just means "no credential from this source".
+///
+/// GUI-launched apps don't inherit the shell PATH, so the common install
+/// locations (Homebrew on arm64 / x64) are probed alongside `gh` on PATH.
 fn gh_cli_token() -> Option<String> {
-    let out = std::process::Command::new("gh")
-        .args(["auth", "token"])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
+    const GH_CANDIDATES: [&str; 3] = ["gh", "/opt/homebrew/bin/gh", "/usr/local/bin/gh"];
+    for program in GH_CANDIDATES {
+        let Ok(out) = std::process::Command::new(program)
+            .args(["auth", "token"])
+            .output()
+        else {
+            continue;
+        };
+        if !out.status.success() {
+            continue;
+        }
+        let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !token.is_empty() {
+            return Some(token);
+        }
     }
-    let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    (!token.is_empty()).then_some(token)
+    None
 }
 
 fn client_for(token: &str) -> AppResult<reqwest::Client> {
@@ -385,4 +408,78 @@ pub async fn list_github_branches(owner: String, repo: String) -> AppResult<Vec<
     let branches: Vec<GhBranch> =
         gh_get_all(&client, &format!("/repos/{owner}/{repo}/branches"), &[]).await?;
     Ok(branches.into_iter().map(|b| b.name).collect())
+}
+
+/// Live diagnostics against the real keychain / gh CLI / GitHub API.
+/// Run manually with `cargo test --lib live_ -- --ignored --nocapture`;
+/// never prints token values, only their presence and length.
+#[cfg(test)]
+mod live_tests {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore = "writes a throwaway keychain entry under a probe key"]
+    async fn live_keyring_roundtrip() {
+        let probe = "github_token_probe";
+        // set → read through the same handle
+        let entry = Entry::new(SERVICE, probe).unwrap();
+        entry.set_password("probe-value").unwrap();
+        assert_eq!(entry.get_password().unwrap(), "probe-value");
+        // read through a FRESH handle (what a later command call does)
+        assert_eq!(
+            Entry::new(SERVICE, probe).unwrap().get_password().unwrap(),
+            "probe-value"
+        );
+        println!("keyring same-process roundtrip ok");
+        entry.delete_credential().unwrap();
+        println!("keyring cleanup ok");
+    }
+
+    #[tokio::test]
+    #[ignore = "touches the real keychain, gh CLI and GitHub API"]
+    async fn live_status_and_repos() {
+        let keychain = keychain_token();
+        println!(
+            "keychain_token: {}",
+            keychain
+                .as_ref()
+                .map(|t| format!("present ({} chars)", t.len()))
+                .unwrap_or_else(|| "absent".into())
+        );
+        println!(
+            "gh_cli_token: {}",
+            if gh_cli_token().is_some() {
+                "present"
+            } else {
+                "absent"
+            }
+        );
+
+        let (client, source) = resolve_client().unwrap().expect("no credential resolved");
+        println!("resolved source: {source:?}");
+
+        let user: GhUser = gh_get(&client, "/user").await.unwrap();
+        println!("GET /user ok: @{}", user.login);
+
+        let repos = list_github_repos(None).await.unwrap();
+        println!("GET /user/repos ok: {} repos", repos.len());
+        if let Some(r) = repos.first() {
+            println!("first: {}/{} default={}", r.owner, r.name, r.default_branch);
+        }
+
+        let accounts = list_repo_accounts().await.unwrap();
+        println!(
+            "accounts: {:?}",
+            accounts
+                .iter()
+                .map(|a| a.login.as_str())
+                .collect::<Vec<_>>()
+        );
+
+        let branch_repo = repos.first().map(|r| (r.owner.clone(), r.name.clone()));
+        if let Some((owner, name)) = branch_repo {
+            let branches = list_github_branches(owner, name.clone()).await.unwrap();
+            println!("branches of {name}: {}", branches.join(", "));
+        }
+    }
 }

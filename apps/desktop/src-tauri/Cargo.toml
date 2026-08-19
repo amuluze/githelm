@@ -23,8 +23,11 @@ tauri-plugin-notification = "2"
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["sync", "rt", "macros"] }
-keyring = "3"
+tokio = { version = "1", features = ["sync", "rt", "macros", "process", "io-util", "time"] }
+# keyring 3 ships no platform backend by default (falls back to an in-memory
+# mock where set_password "succeeds" but nothing persists). apple-native wires
+# it to the macOS Security framework.
+keyring = { version = "3", features = ["apple-native"] }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "2"
@@ -35,6 +38,12 @@ dirs = "6"
 # GitHub REST client for the "import from GitHub" flow. Runs on the Rust side
 # so the renderer CSP can stay closed to the network.
 reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls"] }
+# PTY for the SSH terminal page: spawns the system `ssh` in a pseudo-terminal
+# so auth prompts (password, host-key) stay interactive inside xterm.
+portable-pty = "0.8"
+# Terminal output is a raw byte stream; base64 keeps it intact across events
+# even when UTF-8 sequences split across read chunks.
+base64 = "0.22"
 
 # NSWindow layer corner radius for the borderless macOS window.
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -16,6 +16,15 @@ pub struct Project {
     pub url: Option<String>,
     pub deployment_count: u32,
     pub provider: Provider,
+    /// Deployment pipeline config — all optional until the user configures
+    /// the project for deploys (local build → push → SSH update).
+    pub local_path: Option<String>,
+    pub server_id: Option<String>,
+    pub deploy_dir: Option<String>,
+    /// Local command that builds and pushes the image (e.g. `task push`).
+    pub build_command: Option<String>,
+    /// Remote command run inside `deploy_dir` (e.g. compose pull + up -d).
+    pub update_command: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,6 +82,10 @@ pub struct Server {
     pub status: ServerStatus,
     pub last_seen_at: String,
     pub has_credential: bool,
+    /// SSH login user; null for servers created before v2.
+    pub username: Option<String>,
+    /// SSH port, 22 unless overridden.
+    pub port: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -142,21 +155,33 @@ pub enum IssueKind {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
 pub struct AddServerInput {
     pub name: String,
     pub host: String,
     pub kind: ServerKind,
     pub region: Option<String>,
     pub username: String,
+    /// Stored via the keychain under `server:{id}`; never persisted in SQLite.
     pub credential: String,
+    #[serde(default = "default_ssh_port")]
+    pub port: u16,
 }
 
+fn default_ssh_port() -> u16 {
+    22
+}
+
+/// Saves a project's deploy pipeline config (local path, target server,
+/// deploy dir, build / update commands). Fields left empty are cleared.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TriggerDeploymentInput {
+pub struct UpdateProjectConfigInput {
     pub project_id: String,
-    pub branch: String,
+    pub local_path: Option<String>,
+    pub server_id: Option<String>,
+    pub deploy_dir: Option<String>,
+    pub build_command: Option<String>,
+    pub update_command: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -164,6 +189,22 @@ pub struct TriggerDeploymentInput {
 pub struct ConnectionTestResult {
     pub ok: bool,
     pub latency_ms: u64,
+}
+
+/// One entry of a remote directory listing (deploy-dir picker).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerDirEntry {
+    pub name: String,
+    pub is_dir: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerDirListing {
+    /// The path that was listed ("~" shorthand allowed — it survives `cd`).
+    pub path: String,
+    pub entries: Vec<ServerDirEntry>,
 }
 
 #[derive(Debug, Clone, Serialize)]

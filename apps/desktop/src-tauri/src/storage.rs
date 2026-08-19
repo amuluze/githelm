@@ -10,10 +10,13 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::error::{AppError, AppResult};
-use crate::types::{Deployment, Issue, IssueKind, IssueStatus, LogEntry, Project, Server};
+use crate::types::{
+    Deployment, Issue, IssueKind, IssueStatus, LogEntry, Project, ProjectStatus, Server,
+    ServerStatus,
+};
 
 /// Schema version — bump and add a migration step when the DDL changes.
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 pub fn data_dir() -> AppResult<PathBuf> {
     if let Ok(dir) = std::env::var("GITHelm_HOME") {
@@ -61,70 +64,88 @@ fn migrate(conn: &Connection) -> AppResult<()> {
     if version >= SCHEMA_VERSION {
         return Ok(());
     }
-    conn.execute_batch(
-        r#"
-        CREATE TABLE IF NOT EXISTS projects (
-            id                   TEXT PRIMARY KEY,
-            name                 TEXT NOT NULL,
-            slug                 TEXT NOT NULL,
-            repository           TEXT NOT NULL,
-            branch               TEXT NOT NULL,
-            status               TEXT NOT NULL,
-            latest_deployment_id TEXT,
-            created_at           TEXT NOT NULL,
-            url                  TEXT,
-            deployment_count     INTEGER NOT NULL DEFAULT 0,
-            provider             TEXT NOT NULL
-        );
+    // v1: base tables. Kept verbatim so v0 databases migrate identically.
+    if version < 1 {
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS projects (
+                id                   TEXT PRIMARY KEY,
+                name                 TEXT NOT NULL,
+                slug                 TEXT NOT NULL,
+                repository           TEXT NOT NULL,
+                branch               TEXT NOT NULL,
+                status               TEXT NOT NULL,
+                latest_deployment_id TEXT,
+                created_at           TEXT NOT NULL,
+                url                  TEXT,
+                deployment_count     INTEGER NOT NULL DEFAULT 0,
+                provider             TEXT NOT NULL
+            );
 
-        CREATE TABLE IF NOT EXISTS deployments (
-            id             TEXT PRIMARY KEY,
-            project_id     TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-            commit_sha     TEXT NOT NULL,
-            commit_message TEXT NOT NULL,
-            author         TEXT NOT NULL,
-            status         TEXT NOT NULL,
-            started_at     TEXT NOT NULL,
-            finished_at    TEXT,
-            duration_ms    INTEGER
-        );
+            CREATE TABLE IF NOT EXISTS deployments (
+                id             TEXT PRIMARY KEY,
+                project_id     TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                commit_sha     TEXT NOT NULL,
+                commit_message TEXT NOT NULL,
+                author         TEXT NOT NULL,
+                status         TEXT NOT NULL,
+                started_at     TEXT NOT NULL,
+                finished_at    TEXT,
+                duration_ms    INTEGER
+            );
 
-        CREATE TABLE IF NOT EXISTS servers (
-            id             TEXT PRIMARY KEY,
-            name           TEXT NOT NULL,
-            kind           TEXT NOT NULL,
-            host           TEXT NOT NULL,
-            region         TEXT,
-            status         TEXT NOT NULL,
-            last_seen_at   TEXT NOT NULL,
-            has_credential INTEGER NOT NULL DEFAULT 0
-        );
+            CREATE TABLE IF NOT EXISTS servers (
+                id             TEXT PRIMARY KEY,
+                name           TEXT NOT NULL,
+                kind           TEXT NOT NULL,
+                host           TEXT NOT NULL,
+                region         TEXT,
+                status         TEXT NOT NULL,
+                last_seen_at   TEXT NOT NULL,
+                has_credential INTEGER NOT NULL DEFAULT 0
+            );
 
-        CREATE TABLE IF NOT EXISTS logs (
-            id        TEXT PRIMARY KEY,
-            target_id TEXT NOT NULL,
-            level     TEXT NOT NULL,
-            message   TEXT NOT NULL,
-            timestamp TEXT NOT NULL
-        );
+            CREATE TABLE IF NOT EXISTS logs (
+                id        TEXT PRIMARY KEY,
+                target_id TEXT NOT NULL,
+                level     TEXT NOT NULL,
+                message   TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            );
 
-        CREATE TABLE IF NOT EXISTS issues (
-            id          TEXT PRIMARY KEY,
-            kind        TEXT NOT NULL,
-            status      TEXT NOT NULL,
-            title       TEXT NOT NULL,
-            description TEXT NOT NULL,
-            target_name TEXT NOT NULL,
-            detected_at TEXT NOT NULL,
-            resolved_at TEXT
-        );
+            CREATE TABLE IF NOT EXISTS issues (
+                id          TEXT PRIMARY KEY,
+                kind        TEXT NOT NULL,
+                status      TEXT NOT NULL,
+                title       TEXT NOT NULL,
+                description TEXT NOT NULL,
+                target_name TEXT NOT NULL,
+                detected_at TEXT NOT NULL,
+                resolved_at TEXT
+            );
 
-        CREATE INDEX IF NOT EXISTS idx_deployments_project ON deployments(project_id, started_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_logs_target ON logs(target_id, timestamp DESC);
-        CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status, detected_at DESC);
-        "#,
-    )
-    .map_err(|e| AppError::Internal(format!("create schema: {e}")))?;
+            CREATE INDEX IF NOT EXISTS idx_deployments_project ON deployments(project_id, started_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_logs_target ON logs(target_id, timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status, detected_at DESC);
+            "#,
+        )
+        .map_err(|e| AppError::Internal(format!("create schema: {e}")))?;
+    }
+    // v2: deployment pipeline config on projects, SSH target details on servers.
+    if version < 2 {
+        conn.execute_batch(
+            r#"
+            ALTER TABLE projects ADD COLUMN local_path TEXT;
+            ALTER TABLE projects ADD COLUMN server_id TEXT;
+            ALTER TABLE projects ADD COLUMN deploy_dir TEXT;
+            ALTER TABLE projects ADD COLUMN build_command TEXT;
+            ALTER TABLE projects ADD COLUMN update_command TEXT;
+            ALTER TABLE servers ADD COLUMN username TEXT;
+            ALTER TABLE servers ADD COLUMN port INTEGER NOT NULL DEFAULT 22;
+            "#,
+        )
+        .map_err(|e| AppError::Internal(format!("migrate to v2: {e}")))?;
+    }
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)
         .map_err(|e| AppError::Internal(format!("set user_version: {e}")))?;
     Ok(())
@@ -153,13 +174,17 @@ fn enum_col<T: DeserializeOwned>(row: &rusqlite::Row<'_>, idx: usize) -> rusqlit
 
 // ── Projects ────────────────────────────────────────────────────────────
 
+/// Column list shared by every project SELECT/INSERT — keep row_project in
+/// sync (positional reads).
+const PROJECT_COLS: &str = "id, name, slug, repository, branch, status, latest_deployment_id,
+       created_at, url, deployment_count, provider,
+       local_path, server_id, deploy_dir, build_command, update_command";
+
 pub fn list_projects(conn: &Connection) -> AppResult<Vec<Project>> {
     let mut stmt = conn
-        .prepare(
-            "SELECT id, name, slug, repository, branch, status, latest_deployment_id,
-                    created_at, url, deployment_count, provider
-             FROM projects ORDER BY created_at DESC, rowid DESC",
-        )
+        .prepare(&format!(
+            "SELECT {PROJECT_COLS} FROM projects ORDER BY created_at DESC, rowid DESC"
+        ))
         .map_err(sql_err("list projects"))?;
     let rows = stmt
         .query_map([], row_project)
@@ -171,9 +196,7 @@ pub fn list_projects(conn: &Connection) -> AppResult<Vec<Project>> {
 
 pub fn get_project(conn: &Connection, id: &str) -> AppResult<Option<Project>> {
     conn.query_row(
-        "SELECT id, name, slug, repository, branch, status, latest_deployment_id,
-                created_at, url, deployment_count, provider
-         FROM projects WHERE id = ?1",
+        &format!("SELECT {PROJECT_COLS} FROM projects WHERE id = ?1"),
         params![id],
         row_project,
     )
@@ -186,9 +209,7 @@ pub fn find_project_by_repository(
     repository: &str,
 ) -> AppResult<Option<Project>> {
     conn.query_row(
-        "SELECT id, name, slug, repository, branch, status, latest_deployment_id,
-                created_at, url, deployment_count, provider
-         FROM projects WHERE repository = ?1",
+        &format!("SELECT {PROJECT_COLS} FROM projects WHERE repository = ?1"),
         params![repository],
         row_project,
     )
@@ -201,8 +222,9 @@ pub fn find_project_by_repository(
 pub fn insert_project(conn: &Connection, p: &Project) -> AppResult<()> {
     conn.execute(
         "INSERT INTO projects (id, name, slug, repository, branch, status, latest_deployment_id,
-                              created_at, url, deployment_count, provider)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                              created_at, url, deployment_count, provider,
+                              local_path, server_id, deploy_dir, build_command, update_command)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         params![
             p.id,
             p.name,
@@ -215,10 +237,52 @@ pub fn insert_project(conn: &Connection, p: &Project) -> AppResult<()> {
             p.url,
             p.deployment_count,
             enum_to_str(&p.provider)?,
+            p.local_path,
+            p.server_id,
+            p.deploy_dir,
+            p.build_command,
+            p.update_command,
         ],
     )
     .map(|_| ())
     .map_err(sql_err("insert project"))
+}
+
+/// Persists the deploy pipeline config from the deploy dialog. Empty values
+/// clear the field; `server_id` is validated against the servers table.
+pub fn update_project_config(
+    conn: &Connection,
+    project_id: &str,
+    local_path: Option<&str>,
+    server_id: Option<&str>,
+    deploy_dir: Option<&str>,
+    build_command: Option<&str>,
+    update_command: Option<&str>,
+) -> AppResult<()> {
+    let changed = conn
+        .execute(
+            "UPDATE projects
+             SET local_path = ?2, server_id = ?3, deploy_dir = ?4,
+                 build_command = ?5, update_command = ?6
+             WHERE id = ?1",
+            params![
+                project_id,
+                blank_to_null(local_path),
+                blank_to_null(server_id),
+                blank_to_null(deploy_dir),
+                blank_to_null(build_command),
+                blank_to_null(update_command),
+            ],
+        )
+        .map_err(sql_err("update project config"))?;
+    if changed == 0 {
+        return Err(AppError::NotFound(format!("project {project_id}")));
+    }
+    Ok(())
+}
+
+fn blank_to_null(v: Option<&str>) -> Option<&str> {
+    v.map(str::trim).filter(|s| !s.is_empty())
 }
 
 /// Bookkeeping when a deployment is triggered: bump the counter, point the
@@ -253,6 +317,11 @@ fn row_project(row: &rusqlite::Row<'_>) -> rusqlite::Result<Project> {
         url: row.get(8)?,
         deployment_count: row.get::<_, i64>(9)? as u32,
         provider: enum_col(row, 10)?,
+        local_path: row.get(11)?,
+        server_id: row.get(12)?,
+        deploy_dir: row.get(13)?,
+        build_command: row.get(14)?,
+        update_command: row.get(15)?,
     })
 }
 
@@ -309,6 +378,34 @@ pub fn insert_deployment(conn: &Connection, d: &Deployment) -> AppResult<()> {
     .map_err(sql_err("insert deployment"))
 }
 
+/// Moves a deployment to a terminal/intermediate status, stamping
+/// finished_at / duration_ms when it terminates. Project status flips to
+/// `running` / `error` alongside so the UI stays in sync.
+pub fn update_deployment(
+    conn: &Connection,
+    deployment: &Deployment,
+    project_status: ProjectStatus,
+) -> AppResult<()> {
+    conn.execute(
+        "UPDATE deployments
+         SET status = ?2, finished_at = ?3, duration_ms = ?4
+         WHERE id = ?1",
+        params![
+            deployment.id,
+            enum_to_str(&deployment.status)?,
+            deployment.finished_at,
+            deployment.duration_ms.map(|v| v as i64),
+        ],
+    )
+    .map_err(sql_err("update deployment"))?;
+    conn.execute(
+        "UPDATE projects SET status = ?2 WHERE id = ?1",
+        params![deployment.project_id, enum_to_str(&project_status)?],
+    )
+    .map_err(sql_err("update project status"))?;
+    Ok(())
+}
+
 fn row_deployment(row: &rusqlite::Row<'_>) -> rusqlite::Result<Deployment> {
     Ok(Deployment {
         id: row.get(0)?,
@@ -325,12 +422,14 @@ fn row_deployment(row: &rusqlite::Row<'_>) -> rusqlite::Result<Deployment> {
 
 // ── Servers ─────────────────────────────────────────────────────────────
 
+/// Column list shared by every server SELECT/INSERT — keep row_server in
+/// sync (positional reads).
+const SERVER_COLS: &str = "id, name, kind, host, region, status, last_seen_at, has_credential,
+       username, port";
+
 pub fn list_servers(conn: &Connection) -> AppResult<Vec<Server>> {
     let mut stmt = conn
-        .prepare(
-            "SELECT id, name, kind, host, region, status, last_seen_at, has_credential
-             FROM servers ORDER BY rowid",
-        )
+        .prepare(&format!("SELECT {SERVER_COLS} FROM servers ORDER BY rowid"))
         .map_err(sql_err("list servers"))?;
     let rows = stmt
         .query_map([], row_server)
@@ -342,8 +441,7 @@ pub fn list_servers(conn: &Connection) -> AppResult<Vec<Server>> {
 
 pub fn get_server(conn: &Connection, id: &str) -> AppResult<Option<Server>> {
     conn.query_row(
-        "SELECT id, name, kind, host, region, status, last_seen_at, has_credential
-         FROM servers WHERE id = ?1",
+        &format!("SELECT {SERVER_COLS} FROM servers WHERE id = ?1"),
         params![id],
         row_server,
     )
@@ -353,8 +451,9 @@ pub fn get_server(conn: &Connection, id: &str) -> AppResult<Option<Server>> {
 
 pub fn insert_server(conn: &Connection, s: &Server) -> AppResult<()> {
     conn.execute(
-        "INSERT INTO servers (id, name, kind, host, region, status, last_seen_at, has_credential)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO servers (id, name, kind, host, region, status, last_seen_at, has_credential,
+                              username, port)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             s.id,
             s.name,
@@ -364,6 +463,8 @@ pub fn insert_server(conn: &Connection, s: &Server) -> AppResult<()> {
             enum_to_str(&s.status)?,
             s.last_seen_at,
             s.has_credential as i64,
+            s.username,
+            s.port,
         ],
     )
     .map(|_| ())
@@ -378,6 +479,31 @@ pub fn delete_server(conn: &Connection, id: &str) -> AppResult<bool> {
     Ok(affected > 0)
 }
 
+/// Detaches projects that targeted this server so their next deploy prompts
+/// for a new target instead of failing on a dangling id.
+pub fn clear_project_server(conn: &Connection, server_id: &str) -> AppResult<()> {
+    conn.execute(
+        "UPDATE projects SET server_id = NULL WHERE server_id = ?1",
+        params![server_id],
+    )
+    .map(|_| ())
+    .map_err(sql_err("clear project server"))
+}
+
+pub fn set_server_status(
+    conn: &Connection,
+    id: &str,
+    status: &ServerStatus,
+    last_seen_at: &str,
+) -> AppResult<()> {
+    conn.execute(
+        "UPDATE servers SET status = ?2, last_seen_at = ?3 WHERE id = ?1",
+        params![id, enum_to_str(status)?, last_seen_at],
+    )
+    .map(|_| ())
+    .map_err(sql_err("set server status"))
+}
+
 fn row_server(row: &rusqlite::Row<'_>) -> rusqlite::Result<Server> {
     Ok(Server {
         id: row.get(0)?,
@@ -388,6 +514,11 @@ fn row_server(row: &rusqlite::Row<'_>) -> rusqlite::Result<Server> {
         status: enum_col(row, 5)?,
         last_seen_at: row.get(6)?,
         has_credential: row.get::<_, i64>(7)? != 0,
+        username: row.get(8)?,
+        port: row
+            .get::<_, Option<i64>>(9)?
+            .map(|v| v as u16)
+            .unwrap_or(22),
     })
 }
 
@@ -419,7 +550,7 @@ pub fn list_logs(
     Ok(out)
 }
 
-#[allow(dead_code)]
+/// Written by the deployment pipeline (one row per output line).
 pub fn insert_log(conn: &Connection, l: &LogEntry) -> AppResult<()> {
     conn.execute(
         "INSERT INTO logs (id, target_id, level, message, timestamp)
@@ -519,7 +650,80 @@ mod tests {
             status: ServerStatus::Connecting,
             last_seen_at: "2026-08-19T04:00:00Z".into(),
             has_credential: true,
+            username: Some("root".into()),
+            port: 22,
         }
+    }
+
+    #[test]
+    fn migrates_v1_database_in_place() {
+        let dir = std::env::temp_dir().join(format!("githelm-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("githelm.db");
+
+        // A v1 database: base tables, one project row, user_version = 1.
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                r#"
+                CREATE TABLE projects (
+                    id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL,
+                    repository TEXT NOT NULL, branch TEXT NOT NULL, status TEXT NOT NULL,
+                    latest_deployment_id TEXT, created_at TEXT NOT NULL, url TEXT,
+                    deployment_count INTEGER NOT NULL DEFAULT 0, provider TEXT NOT NULL
+                );
+                CREATE TABLE servers (
+                    id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL,
+                    host TEXT NOT NULL, region TEXT, status TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL, has_credential INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT INTO projects VALUES
+                    ('prj_old', 'Old', 'old', 'acme/old', 'main', 'running',
+                     NULL, '2026-01-01T00:00:00Z', NULL, 3, 'github');
+                INSERT INTO servers VALUES
+                    ('srv_old', 'prod', 'ssh', 'prod.example.com', NULL, 'online',
+                     '2026-01-01T00:00:00Z', 1);
+                PRAGMA user_version = 1;
+                "#,
+            )
+            .unwrap();
+        }
+
+        // Opening migrates to v2 and the v1 rows survive with new defaults.
+        let conn = open_at(&path).unwrap();
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+
+        let project = get_project(&conn, "prj_old").unwrap().unwrap();
+        assert_eq!(project.name, "Old");
+        assert_eq!(project.deployment_count, 3);
+        assert!(project.local_path.is_none() && project.server_id.is_none());
+        assert!(project.update_command.is_none());
+
+        let server = list_servers(&conn).unwrap().remove(0);
+        assert_eq!(server.id, "srv_old");
+        assert_eq!(server.port, 22);
+
+        // Config writes hit the migrated columns and survive a reopen.
+        update_project_config(
+            &conn,
+            "prj_old",
+            Some("/tmp/acme-old"),
+            Some("srv_old"),
+            Some("/srv/old"),
+            Some("task push"),
+            Some("docker compose pull && docker compose up -d"),
+        )
+        .unwrap();
+        let project = get_project(&conn, "prj_old").unwrap().unwrap();
+        assert_eq!(project.local_path.as_deref(), Some("/tmp/acme-old"));
+        assert_eq!(project.server_id.as_deref(), Some("srv_old"));
+        assert_eq!(
+            project.update_command.as_deref(),
+            Some("docker compose pull && docker compose up -d")
+        );
     }
 
     #[test]
@@ -556,6 +760,11 @@ mod tests {
             url: Some("https://atlas.example.com".into()),
             deployment_count: 0,
             provider: Provider::Github,
+            local_path: None,
+            server_id: None,
+            deploy_dir: None,
+            build_command: None,
+            update_command: None,
         };
         insert_project(&conn, &project).unwrap();
 

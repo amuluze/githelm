@@ -12,6 +12,7 @@ import {
   Server,
   Settings,
   Shield,
+  SquareTerminal,
   Sun,
   Timer,
 } from "lucide-react";
@@ -34,6 +35,7 @@ const NAV_MAIN: NavItem[] = [
 
 const NAV_INFRA: NavItem[] = [
   { to: "/servers", label: "服务器", icon: Server },
+  { to: "/terminal", label: "终端", icon: SquareTerminal },
   { to: "/email", label: "邮件", icon: Mail },
   { to: "/tasks", label: "任务", icon: Timer },
 ];

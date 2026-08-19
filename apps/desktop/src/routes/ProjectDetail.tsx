@@ -1,12 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import {
-  ArrowLeft,
-  ExternalLink,
-  GitBranch,
-  Github,
-  Rocket,
-} from "lucide-react";
+import { ArrowLeft, ExternalLink, GitBranch, Github, Rocket } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -20,6 +15,8 @@ import type { Project } from "@githelm/core";
 import { api } from "../lib/api";
 import { PageHeader } from "../components/domain/PageHeader";
 import { DeploymentRow } from "../components/domain/DeploymentRow";
+import { DeployDialog } from "../components/domain/DeployDialog";
+import { DeploymentLogsDialog } from "../components/domain/DeploymentLogsDialog";
 
 const STATUS_LABEL: Record<Project["status"], string> = {
   running: "运行中",
@@ -31,6 +28,10 @@ const STATUS_LABEL: Record<Project["status"], string> = {
 
 export const ProjectDetailPage = () => {
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
+  const [deployOpen, setDeployOpen] = useState(false);
+  const [logDeploymentId, setLogDeploymentId] = useState<string | null>(null);
+
   const project = useQuery({
     queryKey: ["project", id],
     queryFn: async () => {
@@ -43,7 +44,21 @@ export const ProjectDetailPage = () => {
     queryKey: ["deployments", id],
     queryFn: () => api.listDeployments(id),
     enabled: Boolean(id),
+    // Keep status badges fresh while a pipeline is running.
+    refetchInterval: (query) =>
+      query.state.data?.some(
+        (d) => d.status === "building" || d.status === "deploying",
+      )
+        ? 2000
+        : false,
   });
+
+  const invalidateProject = () => {
+    void queryClient.invalidateQueries({ queryKey: ["project", id] });
+    void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    void queryClient.invalidateQueries({ queryKey: ["deployments", id] });
+    void queryClient.invalidateQueries({ queryKey: ["deployments"] });
+  };
 
   if (project.isLoading) {
     return (
@@ -65,9 +80,7 @@ export const ProjectDetailPage = () => {
   }
 
   const p = project.data;
-  const liveDeployment = (deployments.data ?? []).find(
-    (d) => d.status === "live",
-  );
+  const liveDeployment = (deployments.data ?? []).find((d) => d.status === "live");
 
   return (
     <div className="flex h-full flex-col">
@@ -89,7 +102,11 @@ export const ProjectDetailPage = () => {
                   访问
                 </button>
               )}
-              <button type="button" className="th-btn th-btn-primary">
+              <button
+                type="button"
+                className="th-btn th-btn-primary"
+                onClick={() => setDeployOpen(true)}
+              >
                 <Rocket className="h-3.5 w-3.5" />
                 部署
               </button>
@@ -171,6 +188,7 @@ export const ProjectDetailPage = () => {
                     key={d.id}
                     deployment={d}
                     projectName={p.name}
+                    onOpen={(dep) => setLogDeploymentId(dep.id)}
                   />
                 ))
               )}
@@ -188,6 +206,28 @@ export const ProjectDetailPage = () => {
           </Link>
         </div>
       </div>
+
+      {deployOpen && (
+        <DeployDialog
+          project={p}
+          onClose={() => setDeployOpen(false)}
+          onStarted={(dep) => {
+            invalidateProject();
+            setDeployOpen(false);
+            setLogDeploymentId(dep.id);
+          }}
+        />
+      )}
+
+      {logDeploymentId && (
+        <DeploymentLogsDialog
+          deploymentId={logDeploymentId}
+          onClose={() => {
+            setLogDeploymentId(null);
+            invalidateProject();
+          }}
+        />
+      )}
     </div>
   );
 };

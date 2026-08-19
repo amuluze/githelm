@@ -122,6 +122,7 @@ pub fn run() {
             commands::projects::list_projects,
             commands::projects::get_project,
             commands::projects::create_project,
+            commands::projects::update_project_config,
             commands::github::github_status,
             commands::github::save_github_token,
             commands::github::clear_github_token,
@@ -130,12 +131,17 @@ pub fn run() {
             commands::github::list_github_branches,
             commands::deployments::list_deployments,
             commands::deployments::get_deployment,
-            commands::deployments::trigger_deployment,
+            commands::deployments::deploy_project,
             commands::servers::list_servers,
             commands::servers::add_server,
             commands::servers::remove_server,
             commands::servers::test_server_connection,
+            commands::servers::list_server_dir,
             commands::logs::list_logs,
+            commands::terminal::terminal_open,
+            commands::terminal::terminal_write,
+            commands::terminal::terminal_resize,
+            commands::terminal::terminal_close,
             commands::issues::list_issues,
             commands::secrets::save_secret,
             commands::secrets::delete_secret,
@@ -145,6 +151,13 @@ pub fn run() {
             commands::updater::install_update,
             commands::updater::restart_app,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running githelm desktop");
+        .build(tauri::generate_context!())
+        .expect("error while building githelm desktop")
+        .run(|app, event| {
+            use tauri::Manager;
+            if matches!(event, tauri::RunEvent::Exit) {
+                // Kill live SSH sessions so no orphaned ssh outlives the app.
+                commands::terminal::close_all(&app.state::<AppState>());
+            }
+        });
 }

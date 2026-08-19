@@ -20,7 +20,8 @@ import type {
   RepoAccount,
   GitRepo,
   Server,
-  TriggerDeploymentInput,
+  ServerDirListing,
+  UpdateProjectConfigInput,
   UpdateStatus,
 } from "@githelm/core";
 import {
@@ -109,14 +110,19 @@ export const api = {
   getProject: (id: string) => call<Project | null>("get_project", { id }),
   createProject: (input: CreateProjectInput) =>
     call<Project>("create_project", { input }),
+  /** Saves deploy pipeline config and returns the refreshed project. */
+  updateProjectConfig: (input: UpdateProjectConfigInput) =>
+    call<Project>("update_project_config", { input }),
 
   // ── Deployments ──────────────────────────────────────────────────────
   listDeployments: (projectId?: string) =>
     call<Deployment[]>("list_deployments", { projectId: projectId ?? null }),
   getDeployment: (id: string) =>
     call<Deployment | null>("get_deployment", { id }),
-  triggerDeployment: (input: TriggerDeploymentInput) =>
-    call<Deployment>("trigger_deployment", { input }),
+  /** Starts the pipeline (local build & push → SSH update) and returns the
+   *  building record; progress lands in the logs under the deployment id. */
+  deployProject: (projectId: string) =>
+    call<Deployment>("deploy_project", { projectId }),
 
   // ── Servers ──────────────────────────────────────────────────────────
   listServers: () => call<Server[]>("list_servers"),
@@ -124,6 +130,9 @@ export const api = {
   removeServer: (id: string) => call<void>("remove_server", { id }),
   testServerConnection: (id: string) =>
     call<{ ok: boolean; latencyMs: number }>("test_server_connection", { id }),
+  /** Lists a directory on the server for the deploy-dir picker. */
+  listServerDir: (id: string, path?: string) =>
+    call<ServerDirListing>("list_server_dir", { id, path: path ?? null }),
 
   // ── Issues (background checker) ─────────────────────────────────────
   listIssues: () => call<Issue[]>("list_issues"),
@@ -145,6 +154,18 @@ export const api = {
       targetId: targetId ?? null,
       limit,
     }),
+
+  // ── SSH terminal (PTY) ────────────────────────────────────────────────
+  /** Spawns an interactive `ssh` PTY; output arrives via the
+   *  `terminal-output` event (base64), exit via `terminal-exit`. */
+  terminalOpen: (serverId: string) =>
+    call<void>("terminal_open", { serverId }),
+  terminalWrite: (serverId: string, data: string) =>
+    call<void>("terminal_write", { serverId, data }),
+  terminalResize: (serverId: string, cols: number, rows: number) =>
+    call<void>("terminal_resize", { serverId, cols, rows }),
+  terminalClose: (serverId: string) =>
+    call<void>("terminal_close", { serverId }),
 
   // ── Secrets (keyring) ───────────────────────────────────────────────
   saveSecret: (key: string, value: string) =>

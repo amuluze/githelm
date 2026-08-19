@@ -4,12 +4,42 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use crate::storage;
-use crate::types::{CreateProjectInput, Project, ProjectStatus};
+use crate::types::{CreateProjectInput, Project, ProjectStatus, UpdateProjectConfigInput};
 
 #[tauri::command]
 pub fn list_projects(state: State<'_, AppState>) -> AppResult<Vec<Project>> {
     let conn = state.db.lock().expect("db mutex");
     storage::list_projects(&conn)
+}
+
+/// Saves the deploy pipeline config from the deploy dialog and returns the
+/// refreshed project.
+#[tauri::command]
+pub fn update_project_config(
+    state: State<'_, AppState>,
+    input: UpdateProjectConfigInput,
+) -> AppResult<Project> {
+    {
+        let conn = state.db.lock().expect("db mutex");
+        if let Some(server_id) = input.server_id.as_deref() {
+            let server_id = server_id.trim();
+            if !server_id.is_empty() && storage::get_server(&conn, server_id)?.is_none() {
+                return Err(AppError::Validation(format!("服务器 {server_id} 不存在")));
+            }
+        }
+        storage::update_project_config(
+            &conn,
+            &input.project_id,
+            input.local_path.as_deref(),
+            input.server_id.as_deref(),
+            input.deploy_dir.as_deref(),
+            input.build_command.as_deref(),
+            input.update_command.as_deref(),
+        )?;
+    }
+    let conn = state.db.lock().expect("db mutex");
+    storage::get_project(&conn, &input.project_id)?
+        .ok_or_else(|| AppError::NotFound(format!("project {}", input.project_id)))
 }
 
 #[tauri::command]
@@ -64,6 +94,11 @@ pub fn create_project(state: State<'_, AppState>, input: CreateProjectInput) -> 
         url: input.url.filter(|u| !u.trim().is_empty()),
         deployment_count: 0,
         provider: input.provider,
+        local_path: None,
+        server_id: None,
+        deploy_dir: None,
+        build_command: None,
+        update_command: None,
     };
     storage::insert_project(&conn, &project)?;
     Ok(project)

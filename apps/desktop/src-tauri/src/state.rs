@@ -1,15 +1,19 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use rusqlite::Connection;
 
+use crate::commands::terminal::TerminalSession;
 use crate::storage;
 
 /// Application state shared across commands: a single SQLite connection
 /// guarded by a mutex (desktop-scale load — one user, short queries). The
 /// database lives under `~/.githelm/` and is created on first launch.
+/// `terminals` holds the live SSH PTY sessions, keyed by server id.
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<Mutex<Connection>>,
+    pub terminals: Arc<Mutex<HashMap<String, TerminalSession>>>,
 }
 
 impl AppState {
@@ -24,6 +28,7 @@ impl AppState {
         });
         Self {
             db: Arc::new(Mutex::new(db)),
+            terminals: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

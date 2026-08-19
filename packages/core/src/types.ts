@@ -30,6 +30,14 @@ export interface Project {
   deploymentCount: number;
   /** Git provider icon key. */
   provider: Provider;
+  /** Deploy pipeline config — null until configured in the deploy dialog. */
+  localPath: string | null;
+  serverId: string | null;
+  deployDir: string | null;
+  /** Local command that builds and pushes the image (e.g. `task push`). */
+  buildCommand: string | null;
+  /** Remote command run inside deployDir (e.g. compose pull + up -d). */
+  updateCommand: string | null;
 }
 
 export interface Deployment {
@@ -55,6 +63,10 @@ export interface Server {
   lastSeenAt: string;
   /** Whether the connection has a stored credential. Never returned raw. */
   hasCredential: boolean;
+  /** SSH login user; null for servers created before deploy support. */
+  username: string | null;
+  /** SSH port (22 unless overridden). */
+  port: number;
 }
 
 export interface LogEntry {
@@ -131,16 +143,35 @@ export const addServerSchema = z.object({
   username: z.string().min(1, "Username is required"),
   /** Plaintext credential; never returned to the renderer after save. */
   credential: z.string().min(1, "Credential is required"),
+  port: z.coerce.number().int().min(1).max(65535).default(22),
 });
 
 export type AddServerInput = z.infer<typeof addServerSchema>;
 
-export const triggerDeploymentSchema = z.object({
+/** Deploy pipeline config — every field optional until the user fills it. */
+export const projectConfigSchema = z.object({
   projectId: z.string().min(1),
-  branch: z.string().min(1),
+  localPath: z.string().optional(),
+  serverId: z.string().optional(),
+  deployDir: z.string().optional(),
+  buildCommand: z.string().optional(),
+  updateCommand: z.string().optional(),
 });
 
-export type TriggerDeploymentInput = z.infer<typeof triggerDeploymentSchema>;
+export type UpdateProjectConfigInput = z.infer<typeof projectConfigSchema>;
+
+/* ─── Server directory browsing (deploy-dir picker) ─────────────────────── */
+
+export interface ServerDirEntry {
+  name: string;
+  isDir: boolean;
+}
+
+export interface ServerDirListing {
+  /** The path that was listed ("~" shorthand allowed — it survives `cd`). */
+  path: string;
+  entries: ServerDirEntry[];
+}
 
 export const createProjectSchema = z.object({
   name: z.string().min(1, "项目名称不能为空").max(60, "名称最长 60 个字符"),
