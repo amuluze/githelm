@@ -1,24 +1,39 @@
-import { useEffect } from "react";
+import { lazy, useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
-import { OverviewPage } from "./routes/Overview";
-import { ProjectsPage } from "./routes/Projects";
-import { ProjectDetailPage } from "./routes/ProjectDetail";
-import { DeploymentsPage } from "./routes/Deployments";
-import { IssuesPage } from "./routes/Issues";
-import { ServersPage } from "./routes/Servers";
-import { TerminalPage } from "./routes/Terminal";
-import { LogsPage } from "./routes/Logs";
-import { LibraryPage } from "./routes/Library";
-import { ComingSoonPage } from "./routes/ComingSoon";
-import { SettingsPage } from "./routes/Settings";
-import { useThemeStore } from "./stores/theme";
-import { applyThemeToDocument } from "./lib/theme";
 import { useAutoUpdate } from "./hooks/useAutoUpdate";
+import { applyThemeToDocument } from "./lib/theme";
+import { useThemeStore } from "./stores/theme";
 
-export const App = () => {
-  const theme = useThemeStore((s) => s.theme);
-  const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
+// Route modules are code-split: the shell boots without xterm (~200kB) and
+// the heavy library/deploy pages. Named exports are remapped to default so
+// React.lazy can consume them.
+const OverviewPage = lazy(() =>
+  import("./routes/Overview").then(m => ({ default: m.OverviewPage })));
+const ProjectsPage = lazy(() =>
+  import("./routes/Projects").then(m => ({ default: m.ProjectsPage })));
+const ProjectDetailPage = lazy(() =>
+  import("./routes/ProjectDetail").then(m => ({ default: m.ProjectDetailPage })));
+const DeploymentsPage = lazy(() =>
+  import("./routes/Deployments").then(m => ({ default: m.DeploymentsPage })));
+const IssuesPage = lazy(() =>
+  import("./routes/Issues").then(m => ({ default: m.IssuesPage })));
+const ServersPage = lazy(() =>
+  import("./routes/Servers").then(m => ({ default: m.ServersPage })));
+const TerminalPage = lazy(() =>
+  import("./routes/Terminal").then(m => ({ default: m.TerminalPage })));
+const LogsPage = lazy(() =>
+  import("./routes/Logs").then(m => ({ default: m.LogsPage })));
+const LibraryPage = lazy(() =>
+  import("./routes/Library").then(m => ({ default: m.LibraryPage })));
+const ComingSoonPage = lazy(() =>
+  import("./routes/ComingSoon").then(m => ({ default: m.ComingSoonPage })));
+const SettingsPage = lazy(() =>
+  import("./routes/Settings").then(m => ({ default: m.SettingsPage })));
+
+export function App() {
+  const theme = useThemeStore(s => s.theme);
+  const resolvedTheme = useThemeStore(s => s.resolvedTheme);
   useAutoUpdate();
 
   useEffect(() => {
@@ -27,7 +42,8 @@ export const App = () => {
 
   useEffect(() => {
     // Listen for OS theme changes when in 'system' mode.
-    if (theme !== "system") return;
+    if (theme !== "system")
+      return;
     const mql = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => useThemeStore.getState().syncSystemTheme();
     mql.addEventListener("change", handler);
@@ -57,4 +73,4 @@ export const App = () => {
       </Routes>
     </BrowserRouter>
   );
-};
+}
