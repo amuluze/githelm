@@ -246,11 +246,8 @@ pub async fn test_server_connection(
 /// from a GUI app, a bounded connect timeout and accept-new host keys. A
 /// server with a materialized private key gets `-i` + IdentitiesOnly so the
 /// exact saved identity is offered — deterministic for unattended runs.
-/// `port_flag` is `-p` for ssh and `-P` for sftp/scp.
-pub(crate) fn apply_ssh_opts(cmd: &mut Command, server: &Server, port_flag: &str) {
+pub(crate) fn apply_ssh_opts(cmd: &mut Command, server: &Server) {
     cmd.args([
-        port_flag,
-        &server.port.to_string(),
         "-o",
         "BatchMode=yes",
         "-o",
@@ -270,7 +267,9 @@ pub(crate) fn ssh_command(server: &Server) -> Command {
         .clone()
         .unwrap_or_else(|| "root".to_string());
     let mut cmd = Command::new("ssh");
-    apply_ssh_opts(&mut cmd, server, "-p");
+    // `-p` for the port: unambiguous in every OpenSSH version.
+    cmd.arg("-p").arg(server.port.to_string());
+    apply_ssh_opts(&mut cmd, server);
     cmd.arg(format!("{user}@{}", server.host));
     cmd
 }
@@ -278,6 +277,51 @@ pub(crate) fn ssh_command(server: &Server) -> Command {
 /// Single-quote a value for a remote shell command: 'it's' → 'it'\''s'.
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
+}
+
+/// Renders a user-supplied remote path for a shell command. A `~` prefix
+/// cannot stay single-quoted — tilde expansion is disabled inside quotes —
+/// so it is translated to `"$HOME"`, which the login shell expands with
+/// spaces staying safe. Characters that are live inside double quotes
+/// (`$`, backtick, `"`, `\`) are escaped so a path can never become a
+/// command. Anything else keeps the airtight single-quote form.
+pub(crate) fn remote_path_arg(path: &str) -> String {
+    if path == "~" {
+        return "\"$HOME\"".into();
+    }
+    if let Some(rest) = path.strip_prefix("~/") {
+        let escaped = rest
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('$', "\\$")
+            .replace('`', "\\`");
+        return format!("\"$HOME/{escaped}\"");
+    }
+    shell_quote(path)
+}
+
+/// Queries the login shell's `$HOME` over SSH. sftp batch mode has no
+/// remote shell, so `~`-rooted paths must be resolved to absolute paths
+/// before they enter a batch.
+pub(crate) async fn remote_home(server: &Server) -> AppResult<String> {
+    let mut cmd = ssh_command(server);
+    cmd.arg("printf %s \"$HOME\"");
+    let output = cmd
+        .output()
+        .await
+        .map_err(|e| AppError::Internal(format!("无法执行 ssh：{e}")))?;
+    if !output.status.success() {
+        let reason = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(AppError::Validation(format!(
+            "获取远程主目录失败：{}",
+            if reason.is_empty() { "未知原因" } else { &reason }
+        )));
+    }
+    let home = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if home.is_empty() {
+        return Err(AppError::Validation("获取远程主目录失败：远程 $HOME 为空".into()));
+    }
+    Ok(home)
 }
 
 /// Lists a directory on the server so the deploy dialog can browse for the
@@ -301,7 +345,7 @@ pub async fn list_server_dir(
         .to_string();
 
     let mut cmd = ssh_command(&server);
-    cmd.arg(format!("ls -1p {}", shell_quote(&path)));
+    cmd.arg(format!("ls -1p {}", remote_path_arg(&path)));
     let output = cmd
         .output()
         .await
@@ -351,6 +395,21 @@ pub async fn list_server_dir(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tilde_paths_translate_to_home() {
+        assert_eq!(remote_path_arg("~"), "\"$HOME\"");
+        assert_eq!(remote_path_arg("~/logs"), "\"$HOME/logs\"");
+        // spaces stay inside the double quotes, metacharacters escaped
+        assert_eq!(remote_path_arg("~/my dir"), "\"$HOME/my dir\"");
+        assert_eq!(
+            remote_path_arg("~/a\"b$(x)`y`\\z"),
+            "\"$HOME/a\\\"b\\$(x)\\`y\\`\\\\z\""
+        );
+        // non-tilde paths keep the airtight single-quote form
+        assert_eq!(remote_path_arg("/srv/app"), "'/srv/app'");
+        assert_eq!(remote_path_arg("~user/x"), "'~user/x'");
+    }
 
     #[test]
     fn quotes_paths_for_remote_shell() {

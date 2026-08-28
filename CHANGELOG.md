@@ -115,6 +115,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Remote directory browsing broke for the home directory: `ls -1p '~'`
+  single-quotes the tilde, so the shell never expanded it and reported
+  `cannot access '~'` (the deploy-dir picker was affected too). Tilde paths
+  are now translated to `"$HOME"` with double-quote metacharacters escaped
+  (injection-proof), and every SFTP batch resolves `~`-rooted paths to the
+  absolute home up front since the batch protocol has no shell to expand
+  them
+- SFTP transfers failed on some OpenSSH versions with the sftp usage text
+  ("传输失败：usage: sftp …") — the port is now passed as `-o Port=` (the
+  ssh_config directive every version accepts) instead of `-P`, whose
+  meaning flipped from sftp-server path to port at OpenSSH 7.0
 - Reopening a deployment's log dialog within 30s showed the stale seed and
   hid every line streamed in between (including the final success/failure
   line) — the log query now always refetches on mount

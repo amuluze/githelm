@@ -19,7 +19,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use uuid::Uuid;
 
-use crate::commands::servers::apply_ssh_opts;
+use crate::commands::servers::{apply_ssh_opts, remote_home};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use crate::storage;
@@ -45,6 +45,31 @@ fn assert_sftp_safe(kind: &str, path: &str) -> AppResult<()> {
         )));
     }
     Ok(())
+}
+
+/// Translates a `~`-rooted path to an absolute one given the resolved
+/// remote home; any other path passes through untouched.
+fn join_home(path: &str, home: &str) -> String {
+    if path == "~" {
+        home.to_string()
+    } else if let Some(rest) = path.strip_prefix("~/") {
+        format!("{}/{}", home.trim_end_matches('/'), rest)
+    } else {
+        path.to_string()
+    }
+}
+
+/// Resolves `~` / `~/...` to an absolute path via the login shell's $HOME —
+/// the sftp batch has no remote shell to expand tildes. Extra ssh round
+/// trip only for tilde-rooted paths.
+async fn absolute_remote_path(server: &Server, path: &str) -> AppResult<String> {
+    if path == "~" || path.starts_with("~/") {
+        let home = remote_home(server).await?;
+        Ok(join_home(path, &home))
+    }
+    else {
+        Ok(path.to_string())
+    }
 }
 
 /// Double-quotes a path for an sftp batch line. Only valid after
@@ -97,14 +122,17 @@ fn build_delete_batch(remote_path: &str, is_dir: bool) -> String {
 }
 
 /// System sftp with the same non-interactive options as the deploy pipeline
-/// (see `apply_ssh_opts`); sftp takes the port via capital `-P`.
+/// (see `apply_ssh_opts`). The port goes through `-o Port=`: `-P` meant the
+/// sftp-server *path* before OpenSSH 7.0 and the port after — using the
+/// ssh_config directive keeps every version behaving identically.
 fn sftp_command(server: &Server) -> Command {
     let user = server
         .username
         .clone()
         .unwrap_or_else(|| "root".to_string());
     let mut cmd = Command::new("sftp");
-    apply_ssh_opts(&mut cmd, server, "-P");
+    cmd.arg("-o").arg(format!("Port={}", server.port));
+    apply_ssh_opts(&mut cmd, server);
     cmd.arg(format!("{user}@{}", server.host));
     cmd
 }
@@ -240,8 +268,9 @@ pub async fn sftp_upload(
         }
     }
     let (server, db) = load_server(&state, &server_id).await?;
+    let remote_dir = absolute_remote_path(&server, &remote_dir).await?;
     let count = local_paths.len() as u32;
-    let summary = format!("上传 {count} 项 → {}", remote_dir);
+    let summary = format!("上传 {count} 项 → {remote_dir}");
     run_sftp_batch(
         &db,
         &server,
@@ -267,6 +296,7 @@ pub async fn sftp_download(
         return Err(AppError::Validation(format!("本地目录不存在：{local_dir}")));
     }
     let (server, db) = load_server(&state, &server_id).await?;
+    let remote_path = absolute_remote_path(&server, &remote_path).await?;
     let summary = format!("下载 {remote_path} → {local_dir}");
     run_sftp_batch(
         &db,
@@ -294,6 +324,7 @@ pub async fn sftp_mkdir(
     assert_sftp_safe("远程目录", &parent_dir)?;
     let path = join_remote(&parent_dir, &name);
     let (server, db) = load_server(&state, &server_id).await?;
+    let path = absolute_remote_path(&server, &path).await?;
     run_sftp_batch(
         &db,
         &server,
@@ -314,6 +345,7 @@ pub async fn sftp_delete(
 ) -> AppResult<()> {
     assert_sftp_safe("远程路径", &path)?;
     let (server, db) = load_server(&state, &server_id).await?;
+    let path = absolute_remote_path(&server, &path).await?;
     run_sftp_batch(
         &db,
         &server,
@@ -335,6 +367,15 @@ mod tests {
         assert!(assert_sftp_safe("路径", "a\"b").is_err());
         assert!(assert_sftp_safe("路径", "a\\b").is_err());
         assert!(assert_sftp_safe("路径", "a\nb").is_err());
+    }
+
+    #[test]
+    fn join_home_translates_tilde_prefix() {
+        let home = "/home/ada";
+        assert_eq!(join_home("~", home), "/home/ada");
+        assert_eq!(join_home("~/logs", home), "/home/ada/logs");
+        assert_eq!(join_home("~//x", home), "/home/ada//x");
+        assert_eq!(join_home("/srv/app", home), "/srv/app");
     }
 
     #[test]
