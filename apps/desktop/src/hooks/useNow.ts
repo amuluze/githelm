@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
- * A render-stable "now": react/purity forbids `new Date()` during render,
- * and a frozen timestamp per mount is what the relative-time labels want
- * anyway (they refresh on data changes, which remount/re-render the rows).
+ * A "now" that ticks on an interval: react/purity forbids `new Date()`
+ * during render, and relative-time labels ("3 分钟前") must advance without
+ * waiting for a data change to happen to re-render the rows.
  */
-export function useNow(): Date {
-  const [now] = useState(() => new Date());
+export function useNow(intervalMs = 30_000): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), intervalMs);
+    return () => window.clearInterval(id);
+  }, [intervalMs]);
   return now;
 }

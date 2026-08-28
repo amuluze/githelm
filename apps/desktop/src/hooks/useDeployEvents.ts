@@ -39,8 +39,15 @@ export function useDeployEvents() {
       void queryClient.invalidateQueries({ queryKey: ["deployments"] });
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
       void queryClient.invalidateQueries({ queryKey: ["project"] });
-      // Failures open / successes resolve issues on the Rust side.
-      void queryClient.invalidateQueries({ queryKey: ["issues"] });
+      // The log dialog's single-record query uses the singular key.
+      void queryClient.invalidateQueries({
+        queryKey: ["deployment", e.payload.deploymentId],
+      });
+      // Failures open / successes resolve issues on the Rust side — the
+      // intermediate transitions never touch the issues table.
+      if (e.payload.status === "live" || e.payload.status === "failed") {
+        void queryClient.invalidateQueries({ queryKey: ["issues"] });
+      }
       const { status, projectName } = e.payload;
       if (
         (status === "live" || status === "failed" || status === "cancelled")
@@ -49,9 +56,16 @@ export function useDeployEvents() {
         void notifyDeploy(status, projectName);
       }
     });
+    // The background checker emits this when a scan opened or resolved an
+    // issue, so the issues page and badges stay live without polling.
+    const unIssues = listen("issues-changed", () => {
+      if (alive)
+        void queryClient.invalidateQueries({ queryKey: ["issues"] });
+    });
     return () => {
       alive = false;
       void unlisten.then(off => off());
+      void unIssues.then(off => off());
     };
   }, [queryClient]);
 }

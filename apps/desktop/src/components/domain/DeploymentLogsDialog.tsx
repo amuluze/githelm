@@ -7,26 +7,10 @@ import { Loader2, Terminal, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api, ApiError } from "../../lib/api";
-
-const STATUS_LABEL: Record<Deployment["status"], string> = {
-  "queued": "排队中",
-  "building": "构建中",
-  "deploying": "部署中",
-  "live": "已上线",
-  "failed": "失败",
-  "cancelled": "已取消",
-  "rolled-back": "已回滚",
-};
-
-const STATUS_COLOR: Record<Deployment["status"], string> = {
-  "queued": "th-text-muted",
-  "building": "text-[var(--th-warning-fg)]",
-  "deploying": "text-[var(--th-warning-fg)]",
-  "live": "text-[var(--th-success-fg)]",
-  "failed": "text-[var(--th-danger-fg)]",
-  "cancelled": "th-text-muted",
-  "rolled-back": "th-text-muted",
-};
+import {
+  DEPLOYMENT_STATUS_LABEL,
+  DEPLOYMENT_STATUS_TEXT,
+} from "../../lib/deployment";
 
 export interface DeploymentLogsDialogProps {
   deploymentId: string;
@@ -43,6 +27,8 @@ export function DeploymentLogsDialog({
   onClose,
 }: DeploymentLogsDialogProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
+  /** True while the view is at the tail — new lines then auto-scroll. */
+  const pinnedRef = useRef(true);
   const [cancelling, setCancelling] = useState(false);
   /** Lines that arrived as events, in arrival order. */
   const [liveLogs, setLiveLogs] = useState<LogEntry[]>([]);
@@ -92,12 +78,21 @@ export function DeploymentLogsDialog({
     return out;
   }, [logs.data, liveLogs]);
 
-  // Stick to the tail as new lines stream in.
+  // Stick to the tail as new lines stream in — but only while the user
+  // hasn't scrolled up to read; yanking the view back is worse than
+  // missing the newest line.
   useEffect(() => {
     const el = scrollerRef.current;
-    if (el)
+    if (el && pinnedRef.current)
       el.scrollTop = el.scrollHeight;
   }, [allLogs]);
+
+  const trackPinned = () => {
+    const el = scrollerRef.current;
+    if (!el)
+      return;
+    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  };
 
   const dep = deployment.data;
   const status = liveStatus ?? dep?.status;
@@ -125,9 +120,9 @@ export function DeploymentLogsDialog({
           </div>
           <div className="flex items-center gap-3">
             {status && (
-              <span className={`text-xs ${STATUS_COLOR[status]}`}>
+              <span className={`text-xs ${DEPLOYMENT_STATUS_TEXT[status]}`}>
                 {running && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
-                {STATUS_LABEL[status]}
+                {DEPLOYMENT_STATUS_LABEL[status]}
                 {dep?.durationMs ? ` · ${formatDuration(dep.durationMs)}` : ""}
               </span>
             )}
@@ -174,6 +169,7 @@ export function DeploymentLogsDialog({
 
         <div
           ref={scrollerRef}
+          onScroll={trackPinned}
           className="th-bg-inset flex min-h-[240px] flex-1 flex-col gap-px overflow-y-auto rounded-xl p-3 font-mono text-[11px] leading-relaxed"
         >
           {allLogs.length === 0

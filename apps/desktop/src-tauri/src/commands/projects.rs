@@ -54,10 +54,7 @@ pub fn get_project(state: State<'_, AppState>, id: String) -> AppResult<Project>
 /// binding is immutable — it identifies what was imported; the slug follows
 /// the name.
 #[tauri::command]
-pub fn update_project(
-    state: State<'_, AppState>,
-    input: UpdateProjectInput,
-) -> AppResult<Project> {
+pub fn update_project(state: State<'_, AppState>, input: UpdateProjectInput) -> AppResult<Project> {
     let name = input.name.trim().to_string();
     if name.is_empty() {
         return Err(AppError::Validation("项目名称不能为空".into()));

@@ -171,8 +171,43 @@ export const api = {
   listServerDir: (id: string, path?: string) =>
     call<ServerDirListing>("list_server_dir", { id, path: path ?? null }),
 
+  // ── SFTP file transfers ──────────────────────────────────────────────
+  /** Uploads files / directories (recursive) into a remote directory. */
+  sftpUpload: (serverId: string, remoteDir: string, localPaths: string[]) =>
+    call<{ transferred: number }>("sftp_upload", {
+      serverId,
+      remoteDir,
+      localPaths,
+    }),
+  /** Downloads a remote file / directory (recursive) into a local dir. */
+  sftpDownload: (serverId: string, remotePath: string, localDir: string) =>
+    call<{ transferred: number }>("sftp_download", {
+      serverId,
+      remotePath,
+      localDir,
+    }),
+  /** Creates a directory inside `parentDir`. */
+  sftpMkdir: (serverId: string, parentDir: string, name: string) =>
+    call<void>("sftp_mkdir", { serverId, parentDir, name }),
+  /** Deletes a file, or an EMPTY directory (rmdir semantics). */
+  sftpDelete: (serverId: string, path: string, isDir: boolean) =>
+    call<void>("sftp_delete", { serverId, path, isDir }),
+
   // ── Issues (background checker) ─────────────────────────────────────
   listIssues: () => call<Issue[]>("list_issues"),
+  /** Manual resolve — for problems fixed outside a deploy success. */
+  resolveIssue: (id: string) => call<void>("resolve_issue", { id }),
+  /** Puts a resolved issue back to `open` for further tracking. */
+  reopenIssue: (id: string) => call<void>("reopen_issue", { id }),
+  /** Removes an issue from the tracker outright. */
+  deleteIssue: (id: string) => call<void>("delete_issue", { id }),
+  /**
+   * Runs every URL / version check once (domain, port, TLS certificate,
+   * live-vs-HEAD) and returns the transition counts. Also runs on launch
+   * and every 5 minutes in the background.
+   */
+  scanIssues: () =>
+    call<{ checked: number; opened: number; resolved: number }>("scan_issues"),
 
   // ── GitHub import ────────────────────────────────────────────────────
   githubStatus: () => call<GithubStatus>("github_status"),

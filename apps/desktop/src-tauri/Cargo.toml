@@ -64,6 +64,19 @@ libc = "0.2"
 # Terminal output is a raw byte stream; base64 keeps it intact across events
 # even when UTF-8 sequences split across read chunks.
 base64 = "0.22"
+# Issue checker probes (domain / port / TLS certificate) over project URLs.
+# rustls + ring already ship in the tree via reqwest; referenced directly so
+# the cert-expiry check can drive a skip-verify handshake and read the peer
+# certificate. The provider is selected explicitly per handshake, because
+# feature unification puts both providers into the final graph.
+url = "2"
+rustls = { version = "0.23", default-features = false, features = [
+  "ring",
+  "std",
+  "tls12",
+] }
+tokio-rustls = { version = "0.26", default-features = false, features = [ "ring", ] }
+x509-parser = "0.17"
 
 # NSWindow layer corner radius for the borderless macOS window.
 [target.'cfg(target_os = "macos")'.dependencies]

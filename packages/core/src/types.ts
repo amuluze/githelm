@@ -97,6 +97,16 @@ export interface Issue {
   description: string;
   /** Display name of the project / server / domain it is attached to. */
   targetName: string;
+  /**
+   * Stable id of the target (project id for deployment issues) — the
+   * tracking anchor; `targetName` is display-only. Legacy rows carry null.
+   */
+  targetId: string | null;
+  /**
+   * The deployment that produced the issue (deployment kind only) — opens
+   * the pipeline log straight from the issue row.
+   */
+  deploymentId: string | null;
   /** ISO 8601 timestamps. */
   detectedAt: string;
   resolvedAt: string | null;

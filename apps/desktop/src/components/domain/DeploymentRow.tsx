@@ -1,31 +1,12 @@
-import type { Deployment, DeploymentStatus } from "@githelm/core";
+import type { Deployment } from "@githelm/core";
 import { formatDuration, formatRelativeTime, shortSha } from "@githelm/core";
 import { Badge } from "@githelm/ui";
 import { GitCommit } from "lucide-react";
 import { useNow } from "../../hooks/useNow";
-
-const STATUS_LABEL: Record<DeploymentStatus, string> = {
-  "queued": "排队中",
-  "building": "构建中",
-  "deploying": "部署中",
-  "live": "已上线",
-  "failed": "失败",
-  "cancelled": "已取消",
-  "rolled-back": "已回滚",
-};
-
-const STATUS_VARIANT: Record<
-  DeploymentStatus,
-  "muted" | "warning" | "info" | "success" | "danger"
-> = {
-  "queued": "muted",
-  "building": "warning",
-  "deploying": "info",
-  "live": "success",
-  "failed": "danger",
-  "cancelled": "muted",
-  "rolled-back": "muted",
-};
+import {
+  DEPLOYMENT_STATUS_LABEL,
+  DEPLOYMENT_STATUS_VARIANT,
+} from "../../lib/deployment";
 
 export interface DeploymentRowProps {
   deployment: Deployment;
@@ -72,8 +53,8 @@ export function DeploymentRow({
         <span className="text-xs th-text-muted">
           {formatDuration(deployment.durationMs)}
         </span>
-        <Badge variant={STATUS_VARIANT[deployment.status]}>
-          {STATUS_LABEL[deployment.status]}
+        <Badge variant={DEPLOYMENT_STATUS_VARIANT[deployment.status]}>
+          {DEPLOYMENT_STATUS_LABEL[deployment.status]}
         </Badge>
       </div>
     </>

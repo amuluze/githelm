@@ -3,9 +3,9 @@ use std::time::Instant;
 
 use keyring::Entry;
 use tauri::State;
+use tokio::process::Command;
 use uuid::Uuid;
 
-use crate::commands::deployments::ssh_command;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use crate::storage;
@@ -42,8 +42,7 @@ fn write_key_file(server_id: &str, credential: &str) -> AppResult<()> {
     std::fs::create_dir_all(&dir)
         .map_err(|e| AppError::Internal(format!("create keys dir: {e}")))?;
     let path = dir.join(format!("{server_id}.key"));
-    std::fs::write(&path, credential)
-        .map_err(|e| AppError::Internal(format!("write key: {e}")))?;
+    std::fs::write(&path, credential).map_err(|e| AppError::Internal(format!("write key: {e}")))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -242,6 +241,40 @@ pub async fn test_server_connection(
     }
 }
 
+/// Applies the non-interactive SSH options shared by every server access
+/// (deploy pipeline, connection probe, SFTP transfers): no password prompts
+/// from a GUI app, a bounded connect timeout and accept-new host keys. A
+/// server with a materialized private key gets `-i` + IdentitiesOnly so the
+/// exact saved identity is offered — deterministic for unattended runs.
+/// `port_flag` is `-p` for ssh and `-P` for sftp/scp.
+pub(crate) fn apply_ssh_opts(cmd: &mut Command, server: &Server, port_flag: &str) {
+    cmd.args([
+        port_flag,
+        &server.port.to_string(),
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+    ]);
+    if let Some(key) = stored_key_path(&server.id) {
+        cmd.arg("-i").arg(key).args(["-o", "IdentitiesOnly=yes"]);
+    }
+}
+
+/// System ssh with non-interactive auth (agent / default keys / ssh_config).
+pub(crate) fn ssh_command(server: &Server) -> Command {
+    let user = server
+        .username
+        .clone()
+        .unwrap_or_else(|| "root".to_string());
+    let mut cmd = Command::new("ssh");
+    apply_ssh_opts(&mut cmd, server, "-p");
+    cmd.arg(format!("{user}@{}", server.host));
+    cmd
+}
+
 /// Single-quote a value for a remote shell command: 'it's' → 'it'\''s'.
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
@@ -351,7 +384,10 @@ mod tests {
 
         write_key_file(id, "-----BEGIN OPENSSH PRIVATE KEY-----\nzzz").unwrap();
         let path = stored_key_path(id).expect("key file should exist");
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "-----BEGIN OPENSSH PRIVATE KEY-----\nzzz");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "-----BEGIN OPENSSH PRIVATE KEY-----\nzzz"
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

@@ -117,6 +117,21 @@ pub fn run() {
                     .unwrap_or_else(|| "unknown panic".into());
                 eprintln!("[githelm] window chrome setup failed: {msg}");
             }
+
+            // Background issue checker: one scan right at launch, then on a
+            // fixed interval. Transitions reach the renderer via the
+            // `issues-changed` event (see useDeployEvents).
+            let checker = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut ticker = tokio::time::interval(std::time::Duration::from_secs(
+                    commands::checks::SCAN_INTERVAL_SECS,
+                ));
+                ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                loop {
+                    ticker.tick().await; // first tick completes immediately
+                    commands::checks::scan_quiet(&checker).await;
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -142,12 +157,20 @@ pub fn run() {
             commands::servers::remove_server,
             commands::servers::test_server_connection,
             commands::servers::list_server_dir,
+            commands::sftp::sftp_upload,
+            commands::sftp::sftp_download,
+            commands::sftp::sftp_mkdir,
+            commands::sftp::sftp_delete,
             commands::logs::list_logs,
             commands::terminal::terminal_open,
             commands::terminal::terminal_write,
             commands::terminal::terminal_resize,
             commands::terminal::terminal_close,
             commands::issues::list_issues,
+            commands::issues::resolve_issue,
+            commands::issues::reopen_issue,
+            commands::issues::delete_issue,
+            commands::checks::scan_issues,
             commands::secrets::save_secret,
             commands::secrets::delete_secret,
             commands::secrets::has_secret,

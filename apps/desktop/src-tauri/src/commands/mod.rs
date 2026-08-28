@@ -1,4 +1,5 @@
 pub mod app;
+pub mod checks;
 pub mod deployments;
 pub mod github;
 pub mod issues;
@@ -6,5 +7,6 @@ pub mod logs;
 pub mod projects;
 pub mod secrets;
 pub mod servers;
+pub mod sftp;
 pub mod terminal;
 pub mod updater;

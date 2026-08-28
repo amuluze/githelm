@@ -131,8 +131,11 @@ pub fn terminal_open(
         };
         let mut base = Command::new("ssh");
         // A real TERM matters: ssh forwards it to the remote pty.
-        base.env("TERM", "xterm-256color")
-            .args(["-p", &port.to_string(), &format!("{user}@{host}")]);
+        base.env("TERM", "xterm-256color").args([
+            "-p",
+            &port.to_string(),
+            &format!("{user}@{host}"),
+        ]);
         // Offer the stored private key if one was saved; without
         // IdentitiesOnly the agent and default keys stay as fallbacks.
         if let Some(key) = crate::commands::servers::stored_key_path(&server_id) {

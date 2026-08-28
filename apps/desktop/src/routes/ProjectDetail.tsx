@@ -230,22 +230,28 @@ export function ProjectDetailPage() {
           </div>
           <Card className="overflow-hidden p-0">
             <CardContent className="p-0">
-              {(deployments.data ?? []).length === 0
+              {deployments.isError
                 ? (
                     <div className="px-4 py-12 text-center text-sm th-text-muted">
-                      暂无部署记录。
+                      部署记录加载失败，请稍后重试。
                     </div>
                   )
-                : (
-                    (deployments.data ?? []).map(d => (
-                      <DeploymentRow
-                        key={d.id}
-                        deployment={d}
-                        projectName={p.name}
-                        onOpen={dep => setLogDeploymentId(dep.id)}
-                      />
-                    ))
-                  )}
+                : (deployments.data ?? []).length === 0
+                    ? (
+                        <div className="px-4 py-12 text-center text-sm th-text-muted">
+                          暂无部署记录。
+                        </div>
+                      )
+                    : (
+                        (deployments.data ?? []).map(d => (
+                          <DeploymentRow
+                            key={d.id}
+                            deployment={d}
+                            projectName={p.name}
+                            onOpen={dep => setLogDeploymentId(dep.id)}
+                          />
+                        ))
+                      )}
             </CardContent>
           </Card>
         </section>

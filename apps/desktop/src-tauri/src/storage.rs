@@ -16,7 +16,7 @@ use crate::types::{
 };
 
 /// Schema version — bump and add a migration step when the DDL changes.
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 pub fn data_dir() -> AppResult<PathBuf> {
     if let Ok(dir) = std::env::var("GITHelm_HOME") {
@@ -45,6 +45,9 @@ pub fn open() -> AppResult<Connection> {
     // The pipeline writes one log row per output line; prune once per launch
     // so the table stays bounded without paying for a check on every insert.
     prune_logs(&conn, LOG_RETENTION_ROWS)?;
+    // A deploy killed with the app would otherwise strand its project in
+    // `building`, blocking every future deploy (see the fn docs).
+    recover_interrupted_deployments(&conn)?;
     Ok(conn)
 }
 
@@ -149,6 +152,18 @@ fn migrate(conn: &Connection) -> AppResult<()> {
             "#,
         )
         .map_err(|e| AppError::Internal(format!("migrate to v2: {e}")))?;
+    }
+    // v3: issues anchor to a stable target id (project id) instead of the
+    // display name, so a rename can no longer break auto-resolution, and
+    // carry the deployment that produced them for the log-viewer trail.
+    if version < 3 {
+        conn.execute_batch(
+            r#"
+            ALTER TABLE issues ADD COLUMN target_id TEXT;
+            ALTER TABLE issues ADD COLUMN deployment_id TEXT;
+            "#,
+        )
+        .map_err(|e| AppError::Internal(format!("migrate to v3: {e}")))?;
     }
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)
         .map_err(|e| AppError::Internal(format!("set user_version: {e}")))?;
@@ -458,6 +473,31 @@ fn row_deployment(row: &rusqlite::Row<'_>) -> rusqlite::Result<Deployment> {
     })
 }
 
+/// Flips deployments stranded in a running state to `failed` and unsticks
+/// their projects (`building` → `error`). The pipeline dies with the app
+/// (force quit, crash, update restart), so on the next launch no child
+/// process exists anymore — without this sweep `validate_config` would
+/// reject the project forever with "该项目已有部署正在进行中". Returns
+/// (deployments recovered, projects unstuck).
+pub fn recover_interrupted_deployments(conn: &Connection) -> AppResult<(u64, u64)> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let deployments = conn
+        .execute(
+            "UPDATE deployments
+             SET status = 'failed', finished_at = ?1
+             WHERE status IN ('queued', 'building', 'deploying')",
+            params![now],
+        )
+        .map_err(sql_err("recover interrupted deployments"))?;
+    let projects = conn
+        .execute(
+            "UPDATE projects SET status = 'error' WHERE status = 'building'",
+            [],
+        )
+        .map_err(sql_err("recover interrupted projects"))?;
+    Ok((deployments as u64, projects as u64))
+}
+
 // ── Servers ─────────────────────────────────────────────────────────────
 
 /// Column list shared by every server SELECT/INSERT — keep row_server in
@@ -659,10 +699,9 @@ pub fn prune_logs(conn: &Connection, keep: i64) -> AppResult<u64> {
 
 pub fn list_issues(conn: &Connection) -> AppResult<Vec<Issue>> {
     let mut stmt = conn
-        .prepare(
-            "SELECT id, kind, status, title, description, target_name, detected_at, resolved_at
-             FROM issues ORDER BY detected_at DESC, rowid DESC",
-        )
+        .prepare(&format!(
+            "SELECT {ISSUE_COLS} FROM issues ORDER BY detected_at DESC, rowid DESC"
+        ))
         .map_err(sql_err("list issues"))?;
     let rows = stmt
         .query_map([], row_issue)
@@ -672,12 +711,18 @@ pub fn list_issues(conn: &Connection) -> AppResult<Vec<Issue>> {
     Ok(rows)
 }
 
+/// Column list shared by every issue SELECT/INSERT — keep row_issue in sync
+/// (positional reads).
+const ISSUE_COLS: &str = "id, kind, status, title, description, target_name, target_id,
+       deployment_id, detected_at, resolved_at";
+
 /// Written by the deploy pipeline: a failure opens one, the next success
 /// resolves it.
 pub fn insert_issue(conn: &Connection, i: &Issue) -> AppResult<()> {
     conn.execute(
-        "INSERT INTO issues (id, kind, status, title, description, target_name, detected_at, resolved_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO issues (id, kind, status, title, description, target_name, target_id,
+                             deployment_id, detected_at, resolved_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             i.id,
             enum_to_str(&i.kind)?,
@@ -685,6 +730,8 @@ pub fn insert_issue(conn: &Connection, i: &Issue) -> AppResult<()> {
             i.title,
             i.description,
             i.target_name,
+            i.target_id,
+            i.deployment_id,
             i.detected_at,
             i.resolved_at,
         ],
@@ -693,22 +740,38 @@ pub fn insert_issue(conn: &Connection, i: &Issue) -> AppResult<()> {
     .map_err(sql_err("insert issue"))
 }
 
-/// Finds the still-open issue of `kind` attached to `target_name` — the
-/// dedupe anchor for automatic issue creation (one open issue per target).
+/// Finds the still-open issue of `kind` attached to a target — the dedupe
+/// anchor for automatic issue creation (one open issue per target). Matches
+/// primarily on `target_id`; rows created before v3 carry NULL and fall
+/// back to the (then-immutable) target name.
 pub fn find_open_issue(
     conn: &Connection,
     kind: &IssueKind,
+    target_id: Option<&str>,
     target_name: &str,
 ) -> AppResult<Option<Issue>> {
     conn.query_row(
-        "SELECT id, kind, status, title, description, target_name, detected_at, resolved_at
-         FROM issues
-         WHERE kind = ?1 AND target_name = ?2 AND status = 'open'",
-        params![enum_to_str(kind)?, target_name],
+        &format!(
+            "SELECT {ISSUE_COLS}
+             FROM issues
+             WHERE kind = ?1 AND status = 'open'
+               AND (target_id = ?2 OR (target_id IS NULL AND target_name = ?3))",
+        ),
+        params![enum_to_str(kind)?, target_id, target_name],
         row_issue,
     )
     .optional()
     .map_err(sql_err("find open issue"))
+}
+
+pub fn get_issue(conn: &Connection, id: &str) -> AppResult<Option<Issue>> {
+    conn.query_row(
+        &format!("SELECT {ISSUE_COLS} FROM issues WHERE id = ?1"),
+        params![id],
+        row_issue,
+    )
+    .optional()
+    .map_err(sql_err("get issue"))
 }
 
 pub fn resolve_issue(conn: &Connection, id: &str, resolved_at: &str) -> AppResult<()> {
@@ -720,6 +783,23 @@ pub fn resolve_issue(conn: &Connection, id: &str, resolved_at: &str) -> AppResul
     .map_err(sql_err("resolve issue"))
 }
 
+/// Puts a resolved issue back to `open` for further tracking.
+pub fn reopen_issue(conn: &Connection, id: &str) -> AppResult<()> {
+    conn.execute(
+        "UPDATE issues SET status = 'open', resolved_at = NULL WHERE id = ?1",
+        params![id],
+    )
+    .map(|_| ())
+    .map_err(sql_err("reopen issue"))
+}
+
+/// Removes an issue outright; returns false when no row matched.
+pub fn delete_issue(conn: &Connection, id: &str) -> AppResult<bool> {
+    conn.execute("DELETE FROM issues WHERE id = ?1", params![id])
+        .map(|n| n > 0)
+        .map_err(sql_err("delete issue"))
+}
+
 fn row_issue(row: &rusqlite::Row<'_>) -> rusqlite::Result<Issue> {
     Ok(Issue {
         id: row.get(0)?,
@@ -728,8 +808,10 @@ fn row_issue(row: &rusqlite::Row<'_>) -> rusqlite::Result<Issue> {
         title: row.get(3)?,
         description: row.get(4)?,
         target_name: row.get(5)?,
-        detected_at: row.get(6)?,
-        resolved_at: row.get(7)?,
+        target_id: row.get(6)?,
+        deployment_id: row.get(7)?,
+        detected_at: row.get(8)?,
+        resolved_at: row.get(9)?,
     })
 }
 
@@ -783,12 +865,20 @@ mod tests {
                     host TEXT NOT NULL, region TEXT, status TEXT NOT NULL,
                     last_seen_at TEXT NOT NULL, has_credential INTEGER NOT NULL DEFAULT 0
                 );
+                CREATE TABLE issues (
+                    id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL,
+                    title TEXT NOT NULL, description TEXT NOT NULL,
+                    target_name TEXT NOT NULL, detected_at TEXT NOT NULL, resolved_at TEXT
+                );
                 INSERT INTO projects VALUES
                     ('prj_old', 'Old', 'old', 'acme/old', 'main', 'running',
                      NULL, '2026-01-01T00:00:00Z', NULL, 3, 'github');
                 INSERT INTO servers VALUES
                     ('srv_old', 'prod', 'ssh', 'prod.example.com', NULL, 'online',
                      '2026-01-01T00:00:00Z', 1);
+                INSERT INTO issues VALUES
+                    ('iss_old', 'deployment', 'open', '部署失败：旧问题',
+                     '命令退出码 1', 'Old', '2026-01-01T00:00:00Z', NULL);
                 PRAGMA user_version = 1;
                 "#,
             )
@@ -811,6 +901,12 @@ mod tests {
         let server = list_servers(&conn).unwrap().remove(0);
         assert_eq!(server.id, "srv_old");
         assert_eq!(server.port, 22);
+
+        // The v1 issue row survives v3 with a NULL target_id (legacy — it
+        // still matches by name, see deployment_issue_lifecycle).
+        let legacy = get_issue(&conn, "iss_old").unwrap().unwrap();
+        assert_eq!(legacy.target_id, None);
+        assert_eq!(legacy.status, IssueStatus::Open);
 
         // Config writes hit the migrated columns and survive a reopen.
         update_project_config(
@@ -910,6 +1006,63 @@ mod tests {
     }
 
     #[test]
+    fn recovery_marks_interrupted_deploys_failed() {
+        let conn = test_conn();
+        insert_project(
+            &conn,
+            &Project {
+                id: "prj_r".into(),
+                name: "Re".into(),
+                slug: "re".into(),
+                repository: "acme/re".into(),
+                branch: "main".into(),
+                status: ProjectStatus::Building,
+                latest_deployment_id: None,
+                created_at: "2026-08-01T00:00:00Z".into(),
+                url: None,
+                deployment_count: 1,
+                provider: Provider::Github,
+                local_path: None,
+                server_id: None,
+                deploy_dir: None,
+                build_command: None,
+                update_command: None,
+            },
+        )
+        .unwrap();
+        let dep = |id: &str, status: DeploymentStatus| Deployment {
+            id: id.into(),
+            project_id: "prj_r".into(),
+            commit_sha: "a8f3d21".into(),
+            commit_message: "feat: sync".into(),
+            author: "ada".into(),
+            status,
+            started_at: "2026-08-19T04:00:00Z".into(),
+            finished_at: None,
+            duration_ms: None,
+        };
+        insert_deployment(&conn, &dep("dep_run", DeploymentStatus::Deploying)).unwrap();
+        insert_deployment(&conn, &dep("dep_done", DeploymentStatus::Live)).unwrap();
+
+        assert_eq!(recover_interrupted_deployments(&conn).unwrap(), (1, 1));
+
+        let recovered = get_deployment(&conn, "dep_run").unwrap().unwrap();
+        assert_eq!(recovered.status, DeploymentStatus::Failed);
+        assert!(recovered.finished_at.is_some() && recovered.duration_ms.is_none());
+        assert_eq!(
+            get_deployment(&conn, "dep_done").unwrap().unwrap().status,
+            DeploymentStatus::Live
+        );
+        assert_eq!(
+            get_project(&conn, "prj_r").unwrap().unwrap().status,
+            ProjectStatus::Error
+        );
+
+        // Everything is terminal now — a second sweep is a no-op.
+        assert_eq!(recover_interrupted_deployments(&conn).unwrap(), (0, 0));
+    }
+
+    #[test]
     fn logs_limit_semantics() {
         let conn = test_conn();
         for i in 0..5 {
@@ -1001,7 +1154,14 @@ mod tests {
         assert_eq!(stored.repository, "acme/d");
 
         // Unknown id reports false.
-        assert!(!update_project(&conn, &Project { id: "nope".into(), ..project.clone() }).unwrap());
+        assert!(!update_project(
+            &conn,
+            &Project {
+                id: "nope".into(),
+                ..project.clone()
+            }
+        )
+        .unwrap());
 
         // Delete cascades: deployments and their logs are gone too.
         assert!(delete_project(&mut conn, "prj_d").unwrap());
@@ -1053,6 +1213,8 @@ mod tests {
             title: "TLS 证书已过期".into(),
             description: "已自动续期".into(),
             target_name: "Atlas".into(),
+            target_id: Some("prj_atlas".into()),
+            deployment_id: None,
             detected_at: "2026-08-13T00:00:00Z".into(),
             resolved_at: Some("2026-08-13T00:01:00Z".into()),
         };
@@ -1060,15 +1222,20 @@ mod tests {
         let all = list_issues(&conn).unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].kind, IssueKind::Certificate);
+        assert_eq!(all[0].target_id.as_deref(), Some("prj_atlas"));
         assert!(all[0].resolved_at.is_some());
+        assert_eq!(get_issue(&conn, "iss_1").unwrap().unwrap().id, "iss_1");
+        assert!(get_issue(&conn, "iss_missing").unwrap().is_none());
     }
 
     #[test]
     fn deployment_issue_lifecycle() {
         let conn = test_conn();
-        assert!(find_open_issue(&conn, &IssueKind::Deployment, "Atlas")
-            .unwrap()
-            .is_none());
+        assert!(
+            find_open_issue(&conn, &IssueKind::Deployment, Some("prj_a"), "Atlas")
+                .unwrap()
+                .is_none()
+        );
 
         let open = Issue {
             id: "iss_open".into(),
@@ -1077,22 +1244,60 @@ mod tests {
             title: "部署失败：feat: x".into(),
             description: "命令退出码 1".into(),
             target_name: "Atlas".into(),
+            target_id: Some("prj_a".into()),
+            deployment_id: Some("dep_x".into()),
             detected_at: "2026-08-19T04:00:00Z".into(),
             resolved_at: None,
         };
         insert_issue(&conn, &open).unwrap();
-        let found = find_open_issue(&conn, &IssueKind::Deployment, "Atlas")
+        let found = find_open_issue(&conn, &IssueKind::Deployment, Some("prj_a"), "Atlas")
             .unwrap()
             .expect("open issue should be found");
         assert_eq!(found.id, "iss_open");
+        // The deployment trail survives storage.
+        assert_eq!(found.deployment_id.as_deref(), Some("dep_x"));
+
+        // Matching is by target id: a renamed project still resolves.
+        let renamed = find_open_issue(&conn, &IssueKind::Deployment, Some("prj_a"), "Atlas-2")
+            .unwrap()
+            .expect("id match must survive a rename");
+        assert_eq!(renamed.id, "iss_open");
 
         // A resolved or other-target issue does not count as open.
         resolve_issue(&conn, "iss_open", "2026-08-19T05:00:00Z").unwrap();
-        assert!(find_open_issue(&conn, &IssueKind::Deployment, "Atlas")
-            .unwrap()
-            .is_none());
+        assert!(
+            find_open_issue(&conn, &IssueKind::Deployment, Some("prj_a"), "Atlas")
+                .unwrap()
+                .is_none()
+        );
         let stored = list_issues(&conn).unwrap().remove(0);
         assert_eq!(stored.status, IssueStatus::Resolved);
         assert_eq!(stored.resolved_at.as_deref(), Some("2026-08-19T05:00:00Z"));
+
+        // Reopen puts it back into the tracking loop with a cleared timestamp.
+        reopen_issue(&conn, "iss_open").unwrap();
+        let reopened = find_open_issue(&conn, &IssueKind::Deployment, Some("prj_a"), "Atlas")
+            .unwrap()
+            .expect("reopened issue is open again");
+        assert!(reopened.resolved_at.is_none());
+
+        // Legacy rows (pre-v3, NULL target_id) still match by name…
+        reopen_issue(&conn, "iss_open").unwrap();
+        resolve_issue(&conn, "iss_open", "2026-08-19T06:00:00Z").unwrap();
+        let legacy = Issue {
+            id: "iss_legacy".into(),
+            target_id: None,
+            ..reopened.clone()
+        };
+        insert_issue(&conn, &legacy).unwrap();
+        let by_name = find_open_issue(&conn, &IssueKind::Deployment, Some("prj_legacy"), "Atlas")
+            .unwrap()
+            .expect("NULL target_id falls back to name matching");
+        assert_eq!(by_name.id, "iss_legacy");
+
+        // …and delete removes the row outright.
+        assert!(delete_issue(&conn, "iss_legacy").unwrap());
+        assert!(!delete_issue(&conn, "iss_legacy").unwrap());
+        assert!(get_issue(&conn, "iss_legacy").unwrap().is_none());
     }
 }

@@ -21,6 +21,7 @@ use tokio::process::Command;
 use tokio::sync::watch;
 use uuid::Uuid;
 
+use crate::commands::servers::ssh_command;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use crate::storage;
@@ -28,7 +29,6 @@ use crate::types::{
     Deployment, DeploymentStatus, Issue, IssueKind, IssueStatus, LogEntry, LogLevel, Project,
     ProjectStatus, Server, ServerStatus,
 };
-
 /// Payload of the `deploy-status` event — one per pipeline transition.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -165,6 +165,12 @@ pub async fn deploy_project(
         let tx = conn
             .transaction()
             .map_err(|e| AppError::Internal(format!("begin: {e}")))?;
+        // Re-validate inside the transaction: git_info above awaits, so a
+        // concurrent trigger for the same project can commit first and flip
+        // the project to building — the second pipeline must not start.
+        let fresh = storage::get_project(&tx, &project_id)?
+            .ok_or_else(|| AppError::NotFound(format!("project {project_id}")))?;
+        validate_config(&fresh)?;
         storage::insert_deployment(&tx, &dep)?;
         storage::apply_triggered_deployment(&tx, &project.id, &dep.id)?;
         tx.commit()
@@ -314,8 +320,15 @@ async fn run_pipeline(
 
     // Cancelled between steps: skip the remote half.
     if *cancel.borrow() {
-        finish_terminal(&emitter, &db, &mut dep, &project_name, start, Err(AppError::Cancelled))
-            .await;
+        finish_terminal(
+            &emitter,
+            &db,
+            &mut dep,
+            &project_name,
+            start,
+            Err(AppError::Cancelled),
+        )
+        .await;
         return;
     }
 
@@ -354,7 +367,7 @@ async fn run_pipeline(
                 }
             }
             emitter.emit_status(&dep, &project_name);
-            resolve_deployment_issue(&db, &project_name);
+            resolve_deployment_issue(&db, &dep.project_id, &project_name);
             log_line(
                 &emitter,
                 &db,
@@ -363,9 +376,7 @@ async fn run_pipeline(
                 &format!("部署完成，用时 {duration}ms"),
             );
         }
-        Err(err) => {
-            finish_terminal(&emitter, &db, &mut dep, &project_name, start, Err(err)).await
-        }
+        Err(err) => finish_terminal(&emitter, &db, &mut dep, &project_name, start, Err(err)).await,
     }
 }
 
@@ -381,7 +392,13 @@ async fn run_streamed(
     mut cmd: Command,
     cancel: &mut watch::Receiver<bool>,
 ) -> AppResult<()> {
-    log_line(emitter, db, deployment_id, LogLevel::Info, &format!("$ {title}"));
+    log_line(
+        emitter,
+        db,
+        deployment_id,
+        LogLevel::Info,
+        &format!("$ {title}"),
+    );
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -520,7 +537,12 @@ fn record_deployment_issue(
     error: &str,
 ) {
     let conn = db.lock().expect("db mutex");
-    match storage::find_open_issue(&conn, &IssueKind::Deployment, project_name) {
+    match storage::find_open_issue(
+        &conn,
+        &IssueKind::Deployment,
+        Some(&dep.project_id),
+        project_name,
+    ) {
         Ok(Some(_)) => return,
         Ok(None) => {}
         Err(err) => {
@@ -543,6 +565,8 @@ fn record_deployment_issue(
         title: format!("部署失败：{}", dep.commit_message),
         description: error.to_string(),
         target_name: project_name.to_string(),
+        target_id: Some(dep.project_id.clone()),
+        deployment_id: Some(dep.id.clone()),
         detected_at: chrono::Utc::now().to_rfc3339(),
         resolved_at: None,
     };
@@ -552,9 +576,18 @@ fn record_deployment_issue(
 }
 
 /// A successful deploy resolves any open deployment issue for the project.
-fn resolve_deployment_issue(db: &Arc<Mutex<rusqlite::Connection>>, project_name: &str) {
+fn resolve_deployment_issue(
+    db: &Arc<Mutex<rusqlite::Connection>>,
+    project_id: &str,
+    project_name: &str,
+) {
     let conn = db.lock().expect("db mutex");
-    match storage::find_open_issue(&conn, &IssueKind::Deployment, project_name) {
+    match storage::find_open_issue(
+        &conn,
+        &IssueKind::Deployment,
+        Some(project_id),
+        project_name,
+    ) {
         Ok(Some(issue)) => {
             if let Err(err) =
                 storage::resolve_issue(&conn, &issue.id, &chrono::Utc::now().to_rfc3339())
@@ -565,33 +598,6 @@ fn resolve_deployment_issue(db: &Arc<Mutex<rusqlite::Connection>>, project_name:
         Ok(None) => {}
         Err(err) => eprintln!("[githelm] find open issue: {err}"),
     }
-}
-
-/// System ssh with non-interactive auth (agent / default keys / ssh_config).
-/// A server with a stored private key gets `-i` + IdentitiesOnly so the
-/// exact saved identity is offered — deterministic for unattended runs.
-pub(crate) fn ssh_command(server: &Server) -> Command {
-    let user = server
-        .username
-        .clone()
-        .unwrap_or_else(|| "root".to_string());
-    let mut cmd = Command::new("ssh");
-    cmd.args([
-        "-p",
-        &server.port.to_string(),
-        // Never hang on a password prompt from a GUI app.
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "ConnectTimeout=10",
-        "-o",
-        "StrictHostKeyChecking=accept-new",
-    ]);
-    if let Some(key) = super::servers::stored_key_path(&server.id) {
-        cmd.arg("-i").arg(key).args(["-o", "IdentitiesOnly=yes"]);
-    }
-    cmd.arg(format!("{user}@{}", server.host));
-    cmd
 }
 
 fn log_line(
@@ -833,7 +839,10 @@ mod tests {
             let stored = s::get_deployment(&conn, "dep_c").unwrap().unwrap();
             assert_eq!(stored.status, DeploymentStatus::Cancelled);
             assert!(stored.finished_at.is_some() && stored.duration_ms.is_some());
-            assert!(elapsed < std::time::Duration::from_secs(30), "took {elapsed:?}");
+            assert!(
+                elapsed < std::time::Duration::from_secs(30),
+                "took {elapsed:?}"
+            );
             let project = s::get_project(&conn, "prj_c").unwrap().unwrap();
             assert_eq!(project.status, ProjectStatus::Idle);
             let logs = s::list_logs(&conn, Some("dep_c"), 100).unwrap();

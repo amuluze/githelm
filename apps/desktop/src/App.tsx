@@ -22,6 +22,8 @@ const ServersPage = lazy(() =>
   import("./routes/Servers").then(m => ({ default: m.ServersPage })));
 const TerminalPage = lazy(() =>
   import("./routes/Terminal").then(m => ({ default: m.TerminalPage })));
+const FilesPage = lazy(() =>
+  import("./routes/Files").then(m => ({ default: m.FilesPage })));
 const LogsPage = lazy(() =>
   import("./routes/Logs").then(m => ({ default: m.LogsPage })));
 const LibraryPage = lazy(() =>
@@ -62,6 +64,7 @@ export function App() {
           <Route path="servers" element={<ServersPage />} />
           <Route path="terminal" element={<TerminalPage />} />
           <Route path="terminal/:serverId" element={<TerminalPage />} />
+          <Route path="files" element={<FilesPage />} />
           <Route path="logs" element={<LogsPage />} />
           <Route path="library" element={<LibraryPage />} />
           <Route path="email" element={<ComingSoonPage />} />

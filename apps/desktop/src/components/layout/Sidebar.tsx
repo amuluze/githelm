@@ -1,12 +1,14 @@
 import { cn } from "@githelm/ui";
 import {
-  Command,
   Database,
   FileText,
   Folder,
+  FolderOpen,
   LayoutGrid,
   Mail,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Rocket,
   Server,
@@ -17,6 +19,7 @@ import {
   Timer,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
+import { useSettingsStore } from "../../stores/settings";
 import { useThemeStore } from "../../stores/theme";
 
 interface NavItem {
@@ -35,6 +38,7 @@ const NAV_MAIN: NavItem[] = [
 
 const NAV_INFRA: NavItem[] = [
   { to: "/servers", label: "服务器", icon: Server },
+  { to: "/files", label: "文件", icon: FolderOpen },
   { to: "/terminal", label: "终端", icon: SquareTerminal },
   { to: "/email", label: "邮件", icon: Mail },
   { to: "/tasks", label: "任务", icon: Timer },
@@ -67,23 +71,34 @@ function Logo() {
 }
 
 /**
- * Sidebar per githelm.pen: 232px, bg-card, divider right border, brand row
- * (logo · Githelm · theme · ⌘K), grouped nav (h36 / r10 / fs-md), and a
- * bottom "新建项目" CTA under a hairline divider.
+ * Sidebar per githelm.pen: 232px (or a 64px icon rail when collapsed),
+ * bg-card, divider right border, brand row (logo · Githelm · theme ·
+ * collapse toggle), grouped nav (h36 / r10 / fs-md), and a bottom "新建项目"
+ * CTA under a hairline divider.
  */
 export function Sidebar() {
   const resolvedTheme = useThemeStore(s => s.resolvedTheme);
   const cycleTheme = useThemeStore(s => s.cycleTheme);
+  const collapsed = useSettingsStore(s => s.sidebarCollapsed);
+  const toggleSidebar = useSettingsStore(s => s.toggleSidebar);
 
   return (
     <nav
       aria-label="主导航"
-      className="th-bg-card th-bd-divider flex w-[232px] shrink-0 flex-col gap-0.5 border-r px-3 pb-3.5 pt-3.5"
+      className={cn(
+        "th-bg-card th-bd-divider flex shrink-0 flex-col gap-0.5 border-r pb-3.5 pt-3.5 transition-[width] duration-200",
+        collapsed ? "w-16 px-2" : "w-[232px] px-3",
+      )}
     >
-      <div className="flex items-center gap-2.5 px-1.5 pb-2.5 pt-0.5">
+      <div
+        className={cn(
+          "flex items-center gap-2.5 px-1.5 pb-2.5 pt-0.5",
+          collapsed && "flex-col gap-1.5 px-0",
+        )}
+      >
         <Logo />
-        <span className="text-base th-text-strong">Githelm</span>
-        <div className="ml-auto flex items-center gap-1">
+        {!collapsed && <span className="text-base th-text-strong">Githelm</span>}
+        <div className={cn("flex items-center gap-1", collapsed ? "ml-0 flex-col" : "ml-auto")}>
           <button
             type="button"
             aria-label="切换主题"
@@ -101,11 +116,19 @@ export function Sidebar() {
           </button>
           <button
             type="button"
-            aria-label="命令面板"
-            title="命令面板"
-            className="th-bd-default th-text-secondary flex h-6 w-6 items-center justify-center rounded-md border"
+            aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
+            aria-expanded={!collapsed}
+            title={collapsed ? "展开侧边栏" : "收起侧边栏"}
+            onClick={toggleSidebar}
+            className="th-text-secondary flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-[var(--th-sf-05)] hover:th-text-strong"
           >
-            <Command className="h-[13px] w-[13px]" />
+            {collapsed
+              ? (
+                  <PanelLeftOpen className="h-4 w-4" />
+                )
+              : (
+                  <PanelLeftClose className="h-4 w-4" />
+                )}
           </button>
         </div>
       </div>
@@ -113,21 +136,21 @@ export function Sidebar() {
       <ul className="flex flex-col gap-0.5">
         {NAV_MAIN.map(item => (
           <li key={item.to}>
-            <NavItemLink item={item} />
+            <NavItemLink item={item} collapsed={collapsed} />
           </li>
         ))}
 
-        <GroupLabel label="基础设施" />
+        <GroupLabel label="基础设施" collapsed={collapsed} />
         {NAV_INFRA.map(item => (
           <li key={item.to}>
-            <NavItemLink item={item} />
+            <NavItemLink item={item} collapsed={collapsed} />
           </li>
         ))}
 
-        <GroupLabel label="设置" />
+        <GroupLabel label="设置" collapsed={collapsed} />
         {NAV_SETTINGS.map(item => (
           <li key={item.to}>
-            <NavItemLink item={item} />
+            <NavItemLink item={item} collapsed={collapsed} />
           </li>
         ))}
       </ul>
@@ -136,23 +159,29 @@ export function Sidebar() {
       <div className="mb-0.5 h-px bg-[var(--th-divider)]" />
       <NavLink
         to="/library"
-        className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[var(--th-accent)] text-sm text-[var(--th-on-accent)] transition-colors hover:bg-[var(--th-accent-hover)]"
+        title={collapsed ? "新建项目" : undefined}
+        className={cn(
+          "flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[var(--th-accent)] text-sm text-[var(--th-on-accent)] transition-colors hover:bg-[var(--th-accent-hover)]",
+          collapsed && "h-9 self-center",
+        )}
       >
         <Plus className="h-[15px] w-[15px]" />
-        新建项目
+        {!collapsed && "新建项目"}
       </NavLink>
     </nav>
   );
 }
 
-function NavItemLink({ item }: { item: NavItem }) {
+function NavItemLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   return (
     <NavLink
       to={item.to}
       end={item.end}
+      title={collapsed ? item.label : undefined}
       className={({ isActive }) =>
         cn(
           "flex h-9 items-center gap-2.5 rounded-[10px] px-3 text-sm font-normal transition-colors",
+          collapsed && "justify-center px-0",
           isActive
             ? "th-text-strong bg-[var(--th-sf-05)]"
             : "th-text-secondary hover:th-text-strong hover:bg-[var(--th-sf-04)]",
@@ -161,16 +190,19 @@ function NavItemLink({ item }: { item: NavItem }) {
       {({ isActive }) => (
         <>
           <item.icon
-            className={cn("h-4 w-4", isActive ? "th-text-strong" : "th-text-muted")}
+            className={cn("h-4 w-4 shrink-0", isActive ? "th-text-strong" : "th-text-muted")}
           />
-          <span>{item.label}</span>
+          {!collapsed && <span>{item.label}</span>}
         </>
       )}
     </NavLink>
   );
 }
 
-function GroupLabel({ label }: { label: string }) {
+function GroupLabel({ label, collapsed }: { label: string; collapsed: boolean }) {
+  if (collapsed) {
+    return <li aria-hidden className="mx-2 my-1.5 h-px bg-[var(--th-divider)]" />;
+  }
   return (
     <li className="th-text-hint px-3 pb-1 pt-2.5 text-xs font-normal">
       {label}

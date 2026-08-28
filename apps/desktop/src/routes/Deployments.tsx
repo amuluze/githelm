@@ -156,20 +156,36 @@ export function DeploymentsPage() {
                     加载中…
                   </div>
                 )
-              : visible.length === 0
+              : deployments.isError
                 ? (
-                    <DeploymentsEmpty onDeploy={() => setPicking(true)} />
+                    <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+                      <p className="text-sm th-text-muted">
+                        部署记录加载失败：
+                        {deployments.error.message}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void deployments.refetch()}
+                        className="th-btn th-btn-soft px-3.5"
+                      >
+                        重试
+                      </button>
+                    </div>
                   )
-                : (
-                    visible.map(d => (
-                      <DeploymentRow
-                        key={d.id}
-                        deployment={d}
-                        projectName={projectById.get(d.projectId)?.name}
-                        onOpen={(dep: Deployment) => setLogDeploymentId(dep.id)}
-                      />
-                    ))
-                  )}
+                : visible.length === 0
+                  ? (
+                      <DeploymentsEmpty onDeploy={() => setPicking(true)} />
+                    )
+                  : (
+                      visible.map(d => (
+                        <DeploymentRow
+                          key={d.id}
+                          deployment={d}
+                          projectName={projectById.get(d.projectId)?.name}
+                          onOpen={(dep: Deployment) => setLogDeploymentId(dep.id)}
+                        />
+                      ))
+                    )}
           </section>
 
           <aside className="flex w-[300px] shrink-0 flex-col gap-5">

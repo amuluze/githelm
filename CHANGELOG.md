@@ -55,9 +55,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Log retention: the logs table is pruned to the newest 5,000 entries at
   startup and after each deployment finishes
 - OS keychain integration via `keyring` crate
+- Files page with SFTP transfers: browse remote directories, upload files /
+  folders (native picker or drag-and-drop onto the window), download, create
+  folders and delete entries — via the system `sftp` CLI in batch mode using
+  the same non-interactive auth as deploys (agent / default keys / the
+  materialized key file); transfers write start / outcome lines to the
+  server's activity log
+- Interrupted-deployment recovery: deployments stranded in a running state
+  by a crash / force quit are marked `failed` at startup and their projects
+  unstuck from `building` (previously the project rejected every future
+  deploy with "该项目已有部署正在进行中")
+- Issue tracking actions on the issues page: manually mark an issue
+  resolved, reopen a resolved one, or delete the record (with confirmation);
+  issues now anchor to a stable project id (schema v3) so renaming a
+  project can no longer break automatic issue resolution — rows created
+  before the migration keep matching by name
+- Background availability checks for every project URL (plus a scan on
+  launch, every 5 minutes, and on demand via the issues page "重新扫描"):
+  DNS resolution (`domain`), service-port reachability (`port`) and TLS
+  certificate expiry via a skip-verify handshake — expired or ≤14-day
+  certificates open an issue (`certificate`); projects with a local
+  checkout also get a `version` check that flags when the live deployment
+  is behind local HEAD or has diverged. Failures open one issue per kind,
+  passing checks auto-resolve them, and transitions reach the UI through an
+  `issues-changed` event
+- Issues from failed deployments now carry the deployment id: the issue row
+  gains a "查看部署日志" action that opens that pipeline's log viewer
 
 ### Changed
 
+- The issues page: status-aware badges and icon colors (未解决 danger /
+  已解决 success — previously every row showed 已解决), per-tab counts,
+  click-to-expand long descriptions, and a proper error state with retry
+  when loading fails; "重新扫描" now really rescans (see the availability
+  checks above) instead of only refetching the list
+
+- The icon button next to the sidebar's theme toggle (previously a
+  decorative ⌘K command-palette glyph) now collapses the sidebar to a 64px
+  icon rail and back; the choice persists across restarts
 - Command errors now surface their real message in the UI (previously every
   toast showed "[object Object]"); messages no longer carry internal
   English prefixes
@@ -71,5 +106,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   status instead of `rolled-back`
 - SSH private keys pasted into the server form no longer lose their
   newlines (multiline textarea instead of a password input)
+- Two rapid triggers of the same deploy can no longer both pass validation
+  (the config is re-checked inside the insert transaction)
+- Relative-time labels now tick every 30s instead of freezing at the mount
+  time; the log viewer only auto-scrolls while pinned to the tail
+- A failed `list_deployments` no longer renders as the "暂无部署" empty
+  state — the deployments and project pages show an error with a retry
 
 ### Security

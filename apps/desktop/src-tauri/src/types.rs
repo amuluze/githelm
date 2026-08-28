@@ -133,6 +133,13 @@ pub struct Issue {
     pub title: String,
     pub description: String,
     pub target_name: String,
+    /// Stable id of the target (project id for deployment issues) — the
+    /// dedupe / auto-resolve anchor. `target_name` is display-only and
+    /// changes on rename. Legacy rows predate this and carry NULL.
+    pub target_id: Option<String>,
+    /// The deployment that produced the issue (deployment kind only) — the
+    /// trail from an issue row back to its pipeline log.
+    pub deployment_id: Option<String>,
     pub detected_at: String,
     pub resolved_at: Option<String>,
 }
