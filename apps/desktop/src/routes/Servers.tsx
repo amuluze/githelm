@@ -1,21 +1,20 @@
-import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, ExternalLink, Loader2, Plus, Server, X } from "lucide-react";
-import { toast } from "sonner";
 import type { AddServerInput, Server as ServerModel, UpdateServerInput } from "@githelm/core";
 import { addServerSchema, updateServerSchema } from "@githelm/core";
-import { api, ApiError } from "../lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BookOpen, ExternalLink, Loader2, Plus, Server, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { ServerStackIllustration } from "../components/domain/Illustrations";
 import { PageHeader } from "../components/domain/PageHeader";
 import { ServerRow } from "../components/domain/ServerRow";
-import { ServerStackIllustration } from "../components/domain/Illustrations";
+import { api, ApiError } from "../lib/api";
 
 /** servers-mock in githelm.pen. */
 
-export const ServersPage = () => {
+export function ServersPage() {
   const queryClient = useQueryClient();
   const [showDialog, setShowDialog] = useState(false);
   const [editing, setEditing] = useState<ServerModel | null>(null);
-  const [probing, setProbing] = useState(false);
   /** Guards against re-probing when the invalidated query re-runs the effect. */
   const probedRef = useRef(false);
 
@@ -25,18 +24,21 @@ export const ServersPage = () => {
   // last-seen times don't go stale. An unreachable server is an expected
   // outcome — the Rust command records the Error status either way — so
   // rejections are swallowed (the per-row button still reports verbosely).
+  const probe = useMutation({
+    mutationFn: (list: ServerModel[]) =>
+      Promise.allSettled(list.map(s => api.testServerConnection(s.id))),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["servers"] });
+    },
+  });
+
   useEffect(() => {
     const list = servers.data;
-    if (probedRef.current || !list || list.length === 0) return;
+    if (probedRef.current || !list || list.length === 0)
+      return;
     probedRef.current = true;
-    setProbing(true);
-    void Promise.allSettled(list.map((s) => api.testServerConnection(s.id))).then(
-      () => {
-        void queryClient.invalidateQueries({ queryKey: ["servers"] });
-        setProbing(false);
-      },
-    );
-  }, [servers.data, queryClient]);
+    probe.mutate(list);
+  }, [servers.data, probe]);
 
   const remove = useMutation({
     mutationFn: api.removeServer,
@@ -44,7 +46,7 @@ export const ServersPage = () => {
       void queryClient.invalidateQueries({ queryKey: ["servers"] });
       toast.success("服务器已移除");
     },
-    onError: (err) =>
+    onError: err =>
       toast.error(err instanceof ApiError ? err.message : "移除服务器失败"),
   });
 
@@ -55,7 +57,7 @@ export const ServersPage = () => {
       void queryClient.invalidateQueries({ queryKey: ["servers"] });
       toast.success("服务器已更新");
     },
-    onError: (err) =>
+    onError: err =>
       toast.error(err instanceof ApiError ? err.message : "更新服务器失败"),
   });
 
@@ -65,7 +67,7 @@ export const ServersPage = () => {
         <PageHeader
           title="服务器"
           description="管理你的部署服务器和基础设施"
-          actions={
+          actions={(
             <button
               type="button"
               onClick={() => setShowDialog(true)}
@@ -74,7 +76,7 @@ export const ServersPage = () => {
               <Plus className="h-3.5 w-3.5" />
               添加服务器
             </button>
-          }
+          )}
         />
       </div>
 
@@ -87,7 +89,7 @@ export const ServersPage = () => {
             <Server className="h-[15px] w-[15px]" />
             服务器
           </button>
-          {probing && (
+          {probe.isPending && (
             <span className="flex items-center gap-1.5 text-xs th-text-muted">
               <Loader2 className="h-3 w-3 animate-spin" />
               正在检测连接状态…
@@ -95,24 +97,28 @@ export const ServersPage = () => {
           )}
         </div>
 
-        {servers.isLoading ? (
-          <section className="th-card flex flex-1 items-center justify-center">
-            <div className="text-sm th-text-muted">加载中…</div>
-          </section>
-        ) : (servers.data ?? []).length === 0 ? (
-          <ServersEmpty onAdd={() => setShowDialog(true)} />
-        ) : (
-          <section className="th-card min-h-0 flex-1 overflow-auto">
-            {(servers.data ?? []).map((s) => (
-              <ServerRow
-                key={s.id}
-                server={s}
-                onRemove={(id) => remove.mutate(id)}
-                onEdit={(server) => setEditing(server)}
-              />
-            ))}
-          </section>
-        )}
+        {servers.isLoading
+          ? (
+              <section className="th-card flex flex-1 items-center justify-center">
+                <div className="text-sm th-text-muted">加载中…</div>
+              </section>
+            )
+          : (servers.data ?? []).length === 0
+              ? (
+                  <ServersEmpty onAdd={() => setShowDialog(true)} />
+                )
+              : (
+                  <section className="th-card min-h-0 flex-1 overflow-auto">
+                    {(servers.data ?? []).map(s => (
+                      <ServerRow
+                        key={s.id}
+                        server={s}
+                        onRemove={id => remove.mutate(id)}
+                        onEdit={server => setEditing(server)}
+                      />
+                    ))}
+                  </section>
+                )}
       </div>
 
       {showDialog && (
@@ -130,16 +136,18 @@ export const ServersPage = () => {
         <EditServerDialog
           server={editing}
           onClose={() => setEditing(null)}
-          onSaved={(input) => edited.mutate(input)}
+          onSaved={input => edited.mutate(input)}
         />
       )}
     </div>
   );
-};
+}
 
-/** Edits connection details — the fix for "SSH 连接失败" with stale
- *  username/port/host. Credential blank keeps the stored keychain entry. */
-const EditServerDialog = ({
+/**
+ * Edits connection details — the fix for "SSH 连接失败" with stale
+ *  username/port/host. Credential blank keeps the stored keychain entry.
+ */
+function EditServerDialog({
   server,
   onClose,
   onSaved,
@@ -147,7 +155,7 @@ const EditServerDialog = ({
   server: ServerModel;
   onClose: () => void;
   onSaved: (input: UpdateServerInput) => void;
-}) => {
+}) {
   const [form, setForm] = useState<UpdateServerInput>({
     id: server.id,
     name: server.name,
@@ -167,7 +175,8 @@ const EditServerDialog = ({
       const fieldErrors: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
         const key = issue.path[0];
-        if (typeof key === "string") fieldErrors[key] = issue.message;
+        if (typeof key === "string")
+          fieldErrors[key] = issue.message;
       }
       setErrors(fieldErrors);
       return;
@@ -199,7 +208,7 @@ const EditServerDialog = ({
           <Field label="名称" error={errors.name}>
             <input
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={e => setForm({ ...form, name: e.target.value })}
               className="th-input"
             />
           </Field>
@@ -207,7 +216,7 @@ const EditServerDialog = ({
           <Field label="主机" error={errors.host}>
             <input
               value={form.host}
-              onChange={(e) => setForm({ ...form, host: e.target.value })}
+              onChange={e => setForm({ ...form, host: e.target.value })}
               placeholder="203.0.113.42 或 host.example.com"
               className="th-input"
             />
@@ -217,7 +226,7 @@ const EditServerDialog = ({
             <Field label="用户名" error={errors.username}>
               <input
                 value={form.username}
-                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                onChange={e => setForm({ ...form, username: e.target.value })}
                 className="th-input"
               />
             </Field>
@@ -225,9 +234,8 @@ const EditServerDialog = ({
               <input
                 type="number"
                 value={form.port}
-                onChange={(e) =>
-                  setForm({ ...form, port: Number(e.target.value) || 22 })
-                }
+                onChange={e =>
+                  setForm({ ...form, port: Number(e.target.value) || 22 })}
                 className="th-input"
               />
             </Field>
@@ -236,9 +244,8 @@ const EditServerDialog = ({
           <Field label="SSH 私钥（留空保留已保存的）" error={errors.credential}>
             <textarea
               value={form.credential ?? ""}
-              onChange={(e) =>
-                setForm({ ...form, credential: e.target.value })
-              }
+              onChange={e =>
+                setForm({ ...form, credential: e.target.value })}
               rows={4}
               placeholder="粘贴新的私钥内容；留空则不修改"
               className="th-input resize-y font-mono text-[12px]"
@@ -257,36 +264,38 @@ const EditServerDialog = ({
       </form>
     </div>
   );
-};
+}
 
-const ServersEmpty = ({ onAdd }: { onAdd: () => void }) => (
-  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3.5 overflow-y-auto">
-    <ServerStackIllustration />
-    <h2 className="text-lg th-text-strong">还没有服务器</h2>
-    <p className="max-w-[440px] text-center text-[13px] leading-[1.6] th-text-secondary">
-      通过 SSH 连接一台服务器，其余的交给 Githelm 处理 —— Docker、OpenResty、SSL
-      和部署都会自动配置好。
-    </p>
-    <div className="flex items-center gap-3">
-      <button type="button" onClick={onAdd} className="th-btn th-btn-primary px-[18px] py-2.5">
-        <Plus className="h-3.5 w-3.5" />
-        添加你的第一台服务器
-      </button>
-      <button type="button" className="th-btn th-btn-soft px-[18px] py-2.5">
-        <BookOpen className="h-3.5 w-3.5" />
-        See docs
-        <ExternalLink className="h-3 w-3 th-text-muted" />
-      </button>
+function ServersEmpty({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3.5 overflow-y-auto">
+      <ServerStackIllustration />
+      <h2 className="text-lg th-text-strong">还没有服务器</h2>
+      <p className="max-w-[440px] text-center text-[13px] leading-[1.6] th-text-secondary">
+        通过 SSH 连接一台服务器，其余的交给 Githelm 处理 —— Docker、OpenResty、SSL
+        和部署都会自动配置好。
+      </p>
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={onAdd} className="th-btn th-btn-primary px-[18px] py-2.5">
+          <Plus className="h-3.5 w-3.5" />
+          添加你的第一台服务器
+        </button>
+        <button type="button" className="th-btn th-btn-soft px-[18px] py-2.5">
+          <BookOpen className="h-3.5 w-3.5" />
+          See docs
+          <ExternalLink className="h-3 w-3 th-text-muted" />
+        </button>
+      </div>
     </div>
-  </div>
-);
+  );
+}
 
 interface AddServerDialogProps {
   onClose: () => void;
   onAdded: () => void;
 }
 
-const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
+function AddServerDialog({ onClose, onAdded }: AddServerDialogProps) {
   const [form, setForm] = useState<AddServerInput>({
     name: "",
     host: "",
@@ -301,7 +310,7 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
   const add = useMutation({
     mutationFn: api.addServer,
     onSuccess: () => onAdded(),
-    onError: (err) =>
+    onError: err =>
       toast.error(err instanceof ApiError ? err.message : "添加服务器失败"),
   });
 
@@ -312,7 +321,8 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
       const fieldErrors: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
         const key = issue.path[0];
-        if (typeof key === "string") fieldErrors[key] = issue.message;
+        if (typeof key === "string")
+          fieldErrors[key] = issue.message;
       }
       setErrors(fieldErrors);
       return;
@@ -344,7 +354,7 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
           <Field label="名称" error={errors.name}>
             <input
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={e => setForm({ ...form, name: e.target.value })}
               placeholder="production-us-east"
               className="th-input"
             />
@@ -353,7 +363,7 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
           <Field label="主机" error={errors.host}>
             <input
               value={form.host}
-              onChange={(e) => setForm({ ...form, host: e.target.value })}
+              onChange={e => setForm({ ...form, host: e.target.value })}
               placeholder="203.0.113.42 或 host.example.com"
               className="th-input"
             />
@@ -363,9 +373,8 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
             <Field label="类型" error={errors.kind}>
               <select
                 value={form.kind}
-                onChange={(e) =>
-                  setForm({ ...form, kind: e.target.value as "ssh" | "cloud" })
-                }
+                onChange={e =>
+                  setForm({ ...form, kind: e.target.value as "ssh" | "cloud" })}
                 className="th-input"
               >
                 <option value="ssh">SSH</option>
@@ -375,7 +384,7 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
             <Field label="区域" error={errors.region}>
               <input
                 value={form.region ?? ""}
-                onChange={(e) => setForm({ ...form, region: e.target.value })}
+                onChange={e => setForm({ ...form, region: e.target.value })}
                 placeholder="us-east-1"
                 disabled={form.kind !== "cloud"}
                 className="th-input disabled:opacity-50"
@@ -387,7 +396,7 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
             <Field label="用户名" error={errors.username}>
               <input
                 value={form.username}
-                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                onChange={e => setForm({ ...form, username: e.target.value })}
                 className="th-input"
               />
             </Field>
@@ -395,9 +404,8 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
               <input
                 type="number"
                 value={form.port}
-                onChange={(e) =>
-                  setForm({ ...form, port: Number(e.target.value) || 22 })
-                }
+                onChange={e =>
+                  setForm({ ...form, port: Number(e.target.value) || 22 })}
                 className="th-input"
               />
             </Field>
@@ -409,9 +417,8 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
           >
             <textarea
               value={form.credential ?? ""}
-              onChange={(e) =>
-                setForm({ ...form, credential: e.target.value })
-              }
+              onChange={e =>
+                setForm({ ...form, credential: e.target.value })}
               rows={4}
               placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n粘贴私钥内容，部署与终端将自动使用它；留空则使用系统 ssh 配置（agent / 默认密钥）"}
               className="th-input resize-y font-mono text-[12px]"
@@ -434,9 +441,9 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
       </form>
     </div>
   );
-};
+}
 
-const Field = ({
+function Field({
   label,
   error,
   children,
@@ -444,10 +451,12 @@ const Field = ({
   label: string;
   error?: string;
   children: React.ReactNode;
-}) => (
-  <label className="block">
-    <span className="mb-1 block text-xs font-medium th-text-muted">{label}</span>
-    {children}
-    {error && <span className="mt-1 block text-xs text-red-500">{error}</span>}
-  </label>
-);
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium th-text-muted">{label}</span>
+      {children}
+      {error && <span className="mt-1 block text-xs text-red-500">{error}</span>}
+    </label>
+  );
+}

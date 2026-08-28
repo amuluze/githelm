@@ -1,10 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
-import { Badge, StatusDot } from "@githelm/ui";
-import type { Server as ServerModel, ServerKind, ServerStatus } from "@githelm/core";
+import type { ServerKind, Server as ServerModel, ServerStatus } from "@githelm/core";
 import { formatRelativeTime } from "@githelm/core";
+import { Badge, StatusDot } from "@githelm/ui";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Cloud,
@@ -15,6 +12,10 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { useNow } from "../../hooks/useNow";
 import { api, ApiError } from "../../lib/api";
 
 const KIND_ICON: Record<ServerKind, React.ComponentType<{ className?: string }>> = {
@@ -46,17 +47,19 @@ export interface ServerRowProps {
   onEdit?: (server: ServerModel) => void;
 }
 
-export const ServerRow = ({ server, onRemove, onEdit }: ServerRowProps) => {
+export function ServerRow({ server, onRemove, onEdit }: ServerRowProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const Icon = KIND_ICON[server.kind];
 
   const [latency, setLatency] = useState<number | null>(null);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
-  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const now = useNow();
 
   useEffect(() => () => {
-    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    if (confirmTimerRef.current)
+      clearTimeout(confirmTimerRef.current);
   }, []);
 
   const test = useMutation({
@@ -73,13 +76,15 @@ export const ServerRow = ({ server, onRemove, onEdit }: ServerRowProps) => {
   });
 
   const remove = () => {
-    if (!onRemove) return;
+    if (!onRemove)
+      return;
     if (!confirmingRemove) {
       setConfirmingRemove(true);
-      confirmTimer.current = setTimeout(() => setConfirmingRemove(false), 3000);
+      confirmTimerRef.current = setTimeout(setConfirmingRemove, 3000, false);
       return;
     }
-    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    if (confirmTimerRef.current)
+      clearTimeout(confirmTimerRef.current);
     setConfirmingRemove(false);
     onRemove(server.id);
   };
@@ -87,11 +92,13 @@ export const ServerRow = ({ server, onRemove, onEdit }: ServerRowProps) => {
   return (
     <div className="flex items-center gap-3 border-b border-[var(--th-divider)] px-5 py-3 last:border-b-0 hover:bg-[var(--th-sf-03)]">
       <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[var(--th-sf-05)]">
-        {server.kind === "cloud" ? (
-          <Cloud className="h-4 w-4 th-text-strong" />
-        ) : (
-          <ServerIcon className="h-4 w-4 th-text-strong" />
-        )}
+        {server.kind === "cloud"
+          ? (
+              <Cloud className="h-4 w-4 th-text-strong" />
+            )
+          : (
+              <ServerIcon className="h-4 w-4 th-text-strong" />
+            )}
       </div>
 
       <div className="min-w-0 flex-1">
@@ -109,14 +116,18 @@ export const ServerRow = ({ server, onRemove, onEdit }: ServerRowProps) => {
             {server.port !== 22 ? `:${server.port}` : ""}
           </span>
           <span aria-hidden>·</span>
-          <span>最后活跃 {formatRelativeTime(server.lastSeenAt, new Date(), "zh")}</span>
+          <span>
+            最后活跃
+            {formatRelativeTime(server.lastSeenAt, now, "zh")}
+          </span>
         </div>
       </div>
 
       <div className="flex items-center gap-2.5">
         {latency !== null && !test.isPending && (
           <span className="text-xs text-[var(--th-success-fg)]">
-            {latency}ms
+            {latency}
+            ms
           </span>
         )}
         <Badge variant={STATUS_VARIANT[server.status]} className="gap-1.5">
@@ -167,11 +178,13 @@ export const ServerRow = ({ server, onRemove, onEdit }: ServerRowProps) => {
           aria-label={`测试 ${server.name} 连接`}
           className="th-text-muted flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--th-sf-04)] hover:th-text-strong disabled:opacity-60"
         >
-          {test.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Activity className="h-3.5 w-3.5" />
-          )}
+          {test.isPending
+            ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              )
+            : (
+                <Activity className="h-3.5 w-3.5" />
+              )}
         </button>
 
         {onRemove && (
@@ -185,14 +198,16 @@ export const ServerRow = ({ server, onRemove, onEdit }: ServerRowProps) => {
             }
             aria-label={confirmingRemove ? "确认移除" : `移除 ${server.name}`}
           >
-            {confirmingRemove ? (
-              "确认"
-            ) : (
-              <Trash2 className="h-3.5 w-3.5" />
-            )}
+            {confirmingRemove
+              ? (
+                  "确认"
+                )
+              : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
           </button>
         )}
       </div>
     </div>
   );
-};
+}

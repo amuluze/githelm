@@ -1,9 +1,9 @@
-import { useMemo, useRef, useState } from "react";
+import { Card } from "@githelm/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Pause, Play, Trash2 } from "lucide-react";
-import { Card } from "@githelm/ui";
-import { api } from "../lib/api";
+import { useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/domain/PageHeader";
+import { api } from "../lib/api";
 
 type Level = "info" | "warn" | "error" | "debug";
 
@@ -16,7 +16,7 @@ const LEVEL_COLOR: Record<Level, string> = {
 
 const LEVELS: Level[] = ["debug", "info", "warn", "error"];
 
-export const LogsPage = () => {
+export function LogsPage() {
   const servers = useQuery({
     queryKey: ["servers"],
     queryFn: api.listServers,
@@ -24,7 +24,7 @@ export const LogsPage = () => {
   const [activeTarget, setActiveTarget] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [levels, setLevels] = useState<Set<Level>>(
-    new Set(LEVELS),
+    () => new Set(LEVELS),
   );
 
   const initial = useQuery({
@@ -33,22 +33,22 @@ export const LogsPage = () => {
     refetchInterval: paused ? false : 2000,
   });
 
-  const seen = useRef<Set<string>>(new Set());
+  const seenRef = useRef<Set<string>>(new Set());
   const allLogs = useMemo(() => initial.data ?? [], [initial.data]);
 
   // Dedupe by id (refetch returns new data every 2s; we want a rolling window).
   const deduped = useMemo(() => {
     const out: typeof allLogs = [];
     for (const entry of allLogs) {
-      if (!seen.current.has(entry.id)) {
-        seen.current.add(entry.id);
+      if (!seenRef.current.has(entry.id)) {
+        seenRef.current.add(entry.id);
         out.push(entry);
       }
     }
     return out;
   }, [allLogs]);
 
-  const visible = deduped.filter((l) => levels.has(l.level));
+  const visible = deduped.filter(l => levels.has(l.level));
 
   return (
     <div className="flex h-full flex-col">
@@ -56,12 +56,12 @@ export const LogsPage = () => {
         <PageHeader
           title="审计日志"
           description="本地 API 与已连接服务器的实时日志流"
-          actions={
+          actions={(
             <>
               <button
                 type="button"
                 className="th-btn th-btn-secondary px-3.5"
-                onClick={() => setPaused((p) => !p)}
+                onClick={() => setPaused(p => !p)}
               >
                 {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
                 {paused ? "恢复" : "暂停"}
@@ -69,13 +69,13 @@ export const LogsPage = () => {
               <button
                 type="button"
                 className="th-btn th-btn-secondary px-3.5"
-                onClick={() => seen.current.clear()}
+                onClick={() => seenRef.current.clear()}
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 清空
               </button>
             </>
-          }
+          )}
         />
       </div>
 
@@ -90,7 +90,7 @@ export const LogsPage = () => {
               active={activeTarget === null}
               onClick={() => setActiveTarget(null)}
             />
-            {(servers.data ?? []).map((s) => (
+            {(servers.data ?? []).map(s => (
               <SourceItem
                 key={s.id}
                 label={s.name}
@@ -113,7 +113,8 @@ export const LogsPage = () => {
                   type="button"
                   onClick={() => {
                     const next = new Set(levels);
-                    if (enabled) next.delete(l);
+                    if (enabled)
+                      next.delete(l);
                     else next.add(l);
                     setLevels(next);
                   }}
@@ -132,7 +133,7 @@ export const LogsPage = () => {
 
         <Card className="min-w-0 flex-1 overflow-hidden p-0">
           <div className="h-full overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
-            {visible.map((entry) => (
+            {visible.map(entry => (
               <div key={entry.id} className="flex gap-2 py-0.5">
                 <span className="shrink-0 th-text-subtle">
                   {new Date(entry.timestamp).toLocaleTimeString()}
@@ -160,9 +161,9 @@ export const LogsPage = () => {
       </div>
     </div>
   );
-};
+}
 
-const SourceItem = ({
+function SourceItem({
   label,
   hint,
   active,
@@ -172,19 +173,21 @@ const SourceItem = ({
   hint?: string;
   active: boolean;
   onClick: () => void;
-}) => (
-  <li>
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        active
-          ? "block w-full rounded-md bg-[var(--th-sf-06)] px-2.5 py-1.5 text-left"
-          : "block w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[var(--th-sf-04)]"
-      }
-    >
-      <div className="truncate text-sm th-text-title">{label}</div>
-      {hint && <div className="truncate text-[11px] th-text-subtle">{hint}</div>}
-    </button>
-  </li>
-);
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className={
+          active
+            ? "block w-full rounded-md bg-[var(--th-sf-06)] px-2.5 py-1.5 text-left"
+            : "block w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[var(--th-sf-04)]"
+        }
+      >
+        <div className="truncate text-sm th-text-title">{label}</div>
+        {hint && <div className="truncate text-[11px] th-text-subtle">{hint}</div>}
+      </button>
+    </li>
+  );
+}

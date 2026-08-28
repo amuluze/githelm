@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import {
   EllipsisVertical,
   Eye,
@@ -9,10 +8,11 @@ import {
   RotateCcw,
   Zap,
 } from "lucide-react";
-import { api } from "../lib/api";
+import { useNavigate } from "react-router-dom";
+import { WindowIllustration } from "../components/domain/Illustrations";
 import { PageHeader } from "../components/domain/PageHeader";
 import { ProjectCard } from "../components/domain/ProjectCard";
-import { WindowIllustration } from "../components/domain/Illustrations";
+import { api } from "../lib/api";
 
 /** projects-mock in githelm.pen. */
 
@@ -23,7 +23,7 @@ const FEATURES = [
   { icon: RotateCcw, title: "回滚", sub: "一键还原" },
 ];
 
-export const ProjectsPage = () => {
+export function ProjectsPage() {
   const navigate = useNavigate();
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.listProjects });
   const list = projects.data ?? [];
@@ -34,7 +34,7 @@ export const ProjectsPage = () => {
         <PageHeader
           title="项目"
           description={`${list.length} 个项目`}
-          actions={
+          actions={(
             <>
               <button
                 type="button"
@@ -52,35 +52,39 @@ export const ProjectsPage = () => {
                 <EllipsisVertical className="h-4 w-4" />
               </button>
             </>
-          }
+          )}
         />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-8 pb-8 pt-5">
-        {projects.isLoading ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-40 animate-pulse rounded-2xl border th-bd-divider bg-[var(--th-sf-03)]"
-              />
-            ))}
-          </div>
-        ) : list.length === 0 ? (
-          <ProjectsEmpty />
-        ) : (
-          <div className="grid flex-1 content-start grid-cols-1 gap-4 overflow-y-auto md:grid-cols-2 xl:grid-cols-3">
-            {list.map((p) => (
-              <ProjectCard key={p.id} project={p} />
-            ))}
-          </div>
-        )}
+        {projects.isLoading
+          ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {["a", "b", "c"].map(id => (
+                  <div
+                    key={id}
+                    className="h-40 animate-pulse rounded-2xl border th-bd-divider bg-[var(--th-sf-03)]"
+                  />
+                ))}
+              </div>
+            )
+          : list.length === 0
+            ? (
+                <ProjectsEmpty />
+              )
+            : (
+                <div className="grid flex-1 content-start grid-cols-1 gap-4 overflow-y-auto md:grid-cols-2 xl:grid-cols-3">
+                  {list.map(p => (
+                    <ProjectCard key={p.id} project={p} />
+                  ))}
+                </div>
+              )}
       </div>
     </div>
   );
-};
+}
 
-const ProjectsEmpty = () => {
+function ProjectsEmpty() {
   const navigate = useNavigate();
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3.5 overflow-y-auto">
@@ -105,7 +109,7 @@ const ProjectsEmpty = () => {
       </div>
       <span className="text-xs th-text-muted">零配置部署</span>
       <div className="flex gap-4">
-        {FEATURES.map((f) => (
+        {FEATURES.map(f => (
           <div
             key={f.title}
             className="th-card flex w-[196px] flex-col gap-1.5 rounded-xl p-4"
@@ -121,4 +125,4 @@ const ProjectsEmpty = () => {
       <span className="text-xs th-text-hint">或按 ⌘ K 打开命令面板</span>
     </div>
   );
-};
+}

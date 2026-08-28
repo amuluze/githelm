@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react";
+import type { Deployment, DeploymentStatus, Project } from "@githelm/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import {
   Activity as ActivityIcon,
   Check,
@@ -13,13 +12,14 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import type { Deployment, DeploymentStatus, Project } from "@githelm/core";
-import { api } from "../lib/api";
-import { PageHeader } from "../components/domain/PageHeader";
-import { DeploymentRow } from "../components/domain/DeploymentRow";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { DeployDialog } from "../components/domain/DeployDialog";
 import { DeploymentLogsDialog } from "../components/domain/DeploymentLogsDialog";
+import { DeploymentRow } from "../components/domain/DeploymentRow";
 import { WindowIllustration } from "../components/domain/Illustrations";
+import { PageHeader } from "../components/domain/PageHeader";
+import { api } from "../lib/api";
 
 /** deployments-mock in githelm.pen: toolbar + list card + overview rail. */
 
@@ -34,7 +34,7 @@ const TABS: Array<{ key: StatusTab; label: string }> = [
   { key: "rolled-back", label: "已回滚" },
 ];
 
-export const DeploymentsPage = () => {
+export function DeploymentsPage() {
   const queryClient = useQueryClient();
   const deployments = useQuery({
     queryKey: ["deployments"],
@@ -52,31 +52,34 @@ export const DeploymentsPage = () => {
   const [logDeploymentId, setLogDeploymentId] = useState<string | null>(null);
 
   const projectById = useMemo(
-    () => new Map((projects.data ?? []).map((p) => [p.id, p])),
+    () => new Map((projects.data ?? []).map(p => [p.id, p])),
     [projects.data],
   );
 
-  const all = deployments.data ?? [];
+  // Memoized so the `visible` useMemo below gets a stable dependency.
+  const all = useMemo(() => deployments.data ?? [], [deployments.data]);
   const visible = useMemo(() => {
     let list = all;
-    if (project !== "all") list = list.filter((d) => d.projectId === project);
-    if (tab !== "all") list = list.filter((d) => d.status === tab);
+    if (project !== "all")
+      list = list.filter(d => d.projectId === project);
+    if (tab !== "all")
+      list = list.filter(d => d.status === tab);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
-        (d) =>
-          d.commitMessage.toLowerCase().includes(q) ||
-          d.commitSha.toLowerCase().includes(q) ||
-          d.author.toLowerCase().includes(q) ||
-          (projectById.get(d.projectId)?.name ?? "").toLowerCase().includes(q),
+        d =>
+          d.commitMessage.toLowerCase().includes(q)
+          || d.commitSha.toLowerCase().includes(q)
+          || d.author.toLowerCase().includes(q)
+          || (projectById.get(d.projectId)?.name ?? "").toLowerCase().includes(q),
       );
     }
     return list;
   }, [all, project, tab, search, projectById]);
 
-  const projectCount = new Set(all.map((d) => d.projectId)).size;
-  const success = all.filter((d) => d.status === "live").length;
-  const failed = all.filter((d) => d.status === "failed").length;
+  const projectCount = new Set(all.map(d => d.projectId)).size;
+  const success = all.filter(d => d.status === "live").length;
+  const failed = all.filter(d => d.status === "failed").length;
 
   return (
     <div className="flex h-full flex-col">
@@ -84,7 +87,7 @@ export const DeploymentsPage = () => {
         <PageHeader
           title="部署"
           description={`${projectCount} 个项目共 ${all.length} 次`}
-          actions={
+          actions={(
             <button
               type="button"
               className="th-btn th-btn-primary"
@@ -93,7 +96,7 @@ export const DeploymentsPage = () => {
               <Rocket className="h-3.5 w-3.5" />
               部署
             </button>
-          }
+          )}
         />
       </div>
 
@@ -105,7 +108,7 @@ export const DeploymentsPage = () => {
               type="search"
               placeholder="搜索部署…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={e => setSearch(e.target.value)}
               className="w-full bg-transparent text-[13px] outline-none placeholder:th-text-muted"
             />
           </div>
@@ -114,11 +117,11 @@ export const DeploymentsPage = () => {
             <Layers className="pointer-events-none absolute left-3 h-3.5 w-3.5 th-text-secondary" />
             <select
               value={project}
-              onChange={(e) => setProject(e.target.value)}
+              onChange={e => setProject(e.target.value)}
               className="h-full appearance-none rounded-[10px] border th-bd-default th-bg-card pl-[34px] pr-8 text-[13px] th-text-strong outline-none"
             >
               <option value="all">所有项目</option>
-              {(projects.data ?? []).map((p) => (
+              {(projects.data ?? []).map(p => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -128,7 +131,7 @@ export const DeploymentsPage = () => {
           </div>
 
           <div className="flex items-center gap-1">
-            {TABS.map((t) => (
+            {TABS.map(t => (
               <button
                 key={t.key}
                 type="button"
@@ -147,22 +150,26 @@ export const DeploymentsPage = () => {
 
         <div className="flex min-h-0 flex-1 gap-5">
           <section className="th-card flex min-h-0 flex-1 flex-col overflow-auto">
-            {deployments.isLoading ? (
-              <div className="flex flex-1 items-center justify-center text-sm th-text-muted">
-                加载中…
-              </div>
-            ) : visible.length === 0 ? (
-              <DeploymentsEmpty onDeploy={() => setPicking(true)} />
-            ) : (
-              visible.map((d) => (
-                <DeploymentRow
-                  key={d.id}
-                  deployment={d}
-                  projectName={projectById.get(d.projectId)?.name}
-                  onOpen={(dep: Deployment) => setLogDeploymentId(dep.id)}
-                />
-              ))
-            )}
+            {deployments.isLoading
+              ? (
+                  <div className="flex flex-1 items-center justify-center text-sm th-text-muted">
+                    加载中…
+                  </div>
+                )
+              : visible.length === 0
+                ? (
+                    <DeploymentsEmpty onDeploy={() => setPicking(true)} />
+                  )
+                : (
+                    visible.map(d => (
+                      <DeploymentRow
+                        key={d.id}
+                        deployment={d}
+                        projectName={projectById.get(d.projectId)?.name}
+                        onOpen={(dep: Deployment) => setLogDeploymentId(dep.id)}
+                      />
+                    ))
+                  )}
           </section>
 
           <aside className="flex w-[300px] shrink-0 flex-col gap-5">
@@ -250,10 +257,10 @@ export const DeploymentsPage = () => {
       )}
     </div>
   );
-};
+}
 
 /** Step one of deploying from this page: which project. */
-const ProjectPicker = ({
+function ProjectPicker({
   projects,
   onClose,
   onPick,
@@ -261,7 +268,7 @@ const ProjectPicker = ({
   projects: Project[];
   onClose: () => void;
   onPick: (project: Project) => void;
-}) => {
+}) {
   const navigate = useNavigate();
   return (
     <div
@@ -282,51 +289,58 @@ const ProjectPicker = ({
           </button>
         </div>
 
-        {projects.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-8 text-center">
-            <p className="text-sm th-text-muted">还没有项目</p>
-            <button
-              type="button"
-              onClick={() => navigate("/library")}
-              className="th-btn th-btn-primary px-4"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              导入项目
-            </button>
-          </div>
-        ) : (
-          <div className="th-bg-inset flex-1 overflow-y-auto rounded-xl">
-            {projects.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => onPick(p)}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--th-sf-03)]"
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--th-sf-05)]">
-                  <Folder className="h-4 w-4 th-text-strong" />
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm th-text-strong">{p.name}</span>
-                  <span className="truncate text-xs th-text-muted">
-                    {p.repository} · {p.branch}
-                  </span>
-                </span>
-                {p.deploymentCount > 0 && (
-                  <span className="shrink-0 text-xs th-text-muted">
-                    {p.deploymentCount} 次部署
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
+        {projects.length === 0
+          ? (
+              <div className="flex flex-col items-center gap-3 py-8 text-center">
+                <p className="text-sm th-text-muted">还没有项目</p>
+                <button
+                  type="button"
+                  onClick={() => navigate("/library")}
+                  className="th-btn th-btn-primary px-4"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  导入项目
+                </button>
+              </div>
+            )
+          : (
+              <div className="th-bg-inset flex-1 overflow-y-auto rounded-xl">
+                {projects.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => onPick(p)}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--th-sf-03)]"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--th-sf-05)]">
+                      <Folder className="h-4 w-4 th-text-strong" />
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-sm th-text-strong">{p.name}</span>
+                      <span className="truncate text-xs th-text-muted">
+                        {p.repository}
+                        {" "}
+                        ·
+                        {p.branch}
+                      </span>
+                    </span>
+                    {p.deploymentCount > 0 && (
+                      <span className="shrink-0 text-xs th-text-muted">
+                        {p.deploymentCount}
+                        {" "}
+                        次部署
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
       </div>
     </div>
   );
-};
+}
 
-const StatRow = ({
+function StatRow({
   chipClass,
   icon: Icon,
   iconClass,
@@ -338,21 +352,23 @@ const StatRow = ({
   iconClass: string;
   label: string;
   value: number;
-}) => (
-  <div className="flex items-center justify-between">
-    <div className="flex items-center gap-2.5">
-      <span
-        className={`flex h-7 w-7 items-center justify-center rounded-lg ${chipClass}`}
-      >
-        <Icon className={`h-[15px] w-[15px] ${iconClass}`} />
-      </span>
-      <span className="text-[13px] th-text-secondary">{label}</span>
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2.5">
+        <span
+          className={`flex h-7 w-7 items-center justify-center rounded-lg ${chipClass}`}
+        >
+          <Icon className={`h-[15px] w-[15px] ${iconClass}`} />
+        </span>
+        <span className="text-[13px] th-text-secondary">{label}</span>
+      </div>
+      <span className="text-[15px] th-text-strong">{value}</span>
     </div>
-    <span className="text-[15px] th-text-strong">{value}</span>
-  </div>
-);
+  );
+}
 
-const DeploymentsEmpty = ({ onDeploy }: { onDeploy: () => void }) => {
+function DeploymentsEmpty({ onDeploy }: { onDeploy: () => void }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3.5 p-6">
       <WindowIllustration />
@@ -375,4 +391,4 @@ const DeploymentsEmpty = ({ onDeploy }: { onDeploy: () => void }) => {
       </div>
     </div>
   );
-};
+}

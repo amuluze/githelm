@@ -1,15 +1,16 @@
-import { Badge } from "@githelm/ui";
 import type { Deployment, DeploymentStatus } from "@githelm/core";
 import { formatDuration, formatRelativeTime, shortSha } from "@githelm/core";
+import { Badge } from "@githelm/ui";
 import { GitCommit } from "lucide-react";
+import { useNow } from "../../hooks/useNow";
 
 const STATUS_LABEL: Record<DeploymentStatus, string> = {
-  queued: "排队中",
-  building: "构建中",
-  deploying: "部署中",
-  live: "已上线",
-  failed: "失败",
-  cancelled: "已取消",
+  "queued": "排队中",
+  "building": "构建中",
+  "deploying": "部署中",
+  "live": "已上线",
+  "failed": "失败",
+  "cancelled": "已取消",
   "rolled-back": "已回滚",
 };
 
@@ -17,12 +18,12 @@ const STATUS_VARIANT: Record<
   DeploymentStatus,
   "muted" | "warning" | "info" | "success" | "danger"
 > = {
-  queued: "muted",
-  building: "warning",
-  deploying: "info",
-  live: "success",
-  failed: "danger",
-  cancelled: "muted",
+  "queued": "muted",
+  "building": "warning",
+  "deploying": "info",
+  "live": "success",
+  "failed": "danger",
+  "cancelled": "muted",
   "rolled-back": "muted",
 };
 
@@ -33,11 +34,12 @@ export interface DeploymentRowProps {
   onOpen?: (deployment: Deployment) => void;
 }
 
-export const DeploymentRow = ({
+export function DeploymentRow({
   deployment,
   projectName,
   onOpen,
-}: DeploymentRowProps) => {
+}: DeploymentRowProps) {
+  const now = useNow();
   const body = (
     <>
       <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[var(--th-sf-05)]">
@@ -62,7 +64,7 @@ export const DeploymentRow = ({
             </>
           )}
           <span aria-hidden>·</span>
-          <span>{formatRelativeTime(deployment.startedAt, new Date(), "zh")}</span>
+          <span>{formatRelativeTime(deployment.startedAt, now, "zh")}</span>
         </div>
       </div>
 
@@ -94,4 +96,4 @@ export const DeploymentRow = ({
       {body}
     </div>
   );
-};
+}

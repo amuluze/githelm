@@ -1,6 +1,12 @@
-import { useMemo, useState } from "react";
+import type {
+  CreateProjectInput,
+  GithubStatus,
+  GitRepo,
+  Provider,
+  RepoAccount,
+} from "@githelm/core";
+import { createProjectSchema, formatRelativeTime } from "@githelm/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   Asterisk,
@@ -26,17 +32,12 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import type {
-  CreateProjectInput,
-  GithubStatus,
-  GitRepo,
-  Provider,
-  RepoAccount,
-} from "@githelm/core";
-import { createProjectSchema, formatRelativeTime } from "@githelm/core";
-import { api, ApiError } from "../lib/api";
 import { RepoEmptyIllustration } from "../components/domain/Illustrations";
+import { useNow } from "../hooks/useNow";
+import { api, ApiError } from "../lib/api";
 
 /**
  * 新建项目 — mirrors library-mock / library-mock-list in githelm.pen.
@@ -88,7 +89,7 @@ const PROVIDER_LABEL: Record<Provider, string> = {
   local: "自托管",
 };
 
-export const LibraryPage = () => {
+export function LibraryPage() {
   const [tab, setTab] = useState<SourceTab>("github");
   const [draft, setDraft] = useState<CreateDraft | null>(null);
 
@@ -129,23 +130,27 @@ export const LibraryPage = () => {
       </div>
 
       <div className="flex min-h-0 flex-1 gap-5">
-        {tab === "github" ? (
-          <GithubTab onCreate={setDraft} />
-        ) : tab === "url" ? (
-          <UrlTab onCreate={setDraft} />
-        ) : (
-          <SourcePlaceholder tab={tab} />
-        )}
+        {tab === "github"
+          ? (
+              <GithubTab onCreate={setDraft} />
+            )
+          : tab === "url"
+            ? (
+                <UrlTab onCreate={setDraft} />
+              )
+            : (
+                <SourcePlaceholder tab={tab} />
+              )}
       </div>
 
       {draft && <CreateProjectDialog draft={draft} onClose={() => setDraft(null)} />}
     </div>
   );
-};
+}
 
 // ── GitHub tab ───────────────────────────────────────────────────────────
 
-const GithubTab = ({ onCreate }: { onCreate: (draft: CreateDraft) => void }) => {
+function GithubTab({ onCreate }: { onCreate: (draft: CreateDraft) => void }) {
   const [account, setAccount] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("all");
@@ -169,13 +174,15 @@ const GithubTab = ({ onCreate }: { onCreate: (draft: CreateDraft) => void }) => 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
-        (r) =>
-          r.name.toLowerCase().includes(q) ||
-          r.description?.toLowerCase().includes(q),
+        r =>
+          r.name.toLowerCase().includes(q)
+          || r.description?.toLowerCase().includes(q),
       );
     }
-    if (visibility === "public") list = list.filter((r) => !r.private);
-    if (visibility === "private") list = list.filter((r) => r.private);
+    if (visibility === "public")
+      list = list.filter(r => !r.private);
+    if (visibility === "private")
+      list = list.filter(r => r.private);
     return [...list].sort((a, b) =>
       sort === "recent"
         ? b.updatedAt.localeCompare(a.updatedAt)
@@ -219,8 +226,7 @@ const GithubTab = ({ onCreate }: { onCreate: (draft: CreateDraft) => void }) => 
                 style={ACCOUNT_STYLE[i % ACCOUNT_STYLE.length]}
                 active={account === acc.login}
                 onClick={() =>
-                  setAccount(account === acc.login ? null : acc.login)
-                }
+                  setAccount(account === acc.login ? null : acc.login)}
               />
             ))}
             {accounts.isLoading && (
@@ -238,7 +244,7 @@ const GithubTab = ({ onCreate }: { onCreate: (draft: CreateDraft) => void }) => 
                 type="search"
                 placeholder="搜索仓库..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={e => setSearch(e.target.value)}
                 className="w-full bg-transparent text-sm outline-none placeholder:th-text-muted"
               />
             </div>
@@ -280,38 +286,44 @@ const GithubTab = ({ onCreate }: { onCreate: (draft: CreateDraft) => void }) => 
         <div className="h-px bg-[var(--th-divider)]" />
 
         <div className="min-h-0 flex-1 overflow-auto">
-          {repos.isLoading ? (
-            <RepoSkeleton />
-          ) : repos.isError ? (
-            <RepoErrorState
-              message={
-                repos.error instanceof ApiError
-                  ? repos.error.message
-                  : "仓库列表加载失败"
-              }
-              onRetry={() => void repos.refetch()}
-            />
-          ) : filtered.length === 0 ? (
-            <RepoEmptyState filtered={filterActive} />
-          ) : (
-            filtered.map((repo) => (
-              <RepoRow
-                key={repo.id}
-                repo={repo}
-                onClick={() => onCreate(draftFromRepo(repo))}
-              />
-            ))
-          )}
+          {repos.isLoading
+            ? (
+                <RepoSkeleton />
+              )
+            : repos.isError
+              ? (
+                  <RepoErrorState
+                    message={
+                      repos.error instanceof ApiError
+                        ? repos.error.message
+                        : "仓库列表加载失败"
+                    }
+                    onRetry={() => void repos.refetch()}
+                  />
+                )
+              : filtered.length === 0
+                ? (
+                    <RepoEmptyState filtered={filterActive} />
+                  )
+                : (
+                    filtered.map(repo => (
+                      <RepoRow
+                        key={repo.id}
+                        repo={repo}
+                        onClick={() => onCreate(draftFromRepo(repo))}
+                      />
+                    ))
+                  )}
         </div>
       </section>
 
       {status.data && <LibraryAside repos={repos.data ?? []} status={status.data} />}
     </>
   );
-};
+}
 
 /** Not connected: PAT paste form, plus a pointer at `gh auth login`. */
-const ConnectCard = ({ error }: { error?: string }) => {
+function ConnectCard({ error }: { error?: string }) {
   const queryClient = useQueryClient();
   const [token, setToken] = useState("");
 
@@ -323,7 +335,7 @@ const ConnectCard = ({ error }: { error?: string }) => {
       void queryClient.invalidateQueries({ queryKey: ["github-repos"] });
       toast.success(`GitHub 已连接（@${next.login}）`);
     },
-    onError: (err) =>
+    onError: err =>
       toast.error(err instanceof ApiError ? err.message : "连接 GitHub 失败"),
   });
 
@@ -357,7 +369,7 @@ const ConnectCard = ({ error }: { error?: string }) => {
           <input
             type="password"
             value={token}
-            onChange={(e) => setToken(e.target.value)}
+            onChange={e => setToken(e.target.value)}
             placeholder="ghp_… / github_pat_…"
             className="th-input"
           />
@@ -387,17 +399,19 @@ const ConnectCard = ({ error }: { error?: string }) => {
       </div>
     </section>
   );
-};
+}
 
-const draftFromRepo = (repo: GitRepo): CreateDraft => ({
-  provider: "github",
-  name: repo.name,
-  repository: `${repo.owner}/${repo.name}`,
-  branch: repo.defaultBranch || "main",
-  owner: repo.owner,
-});
+function draftFromRepo(repo: GitRepo): CreateDraft {
+  return {
+    provider: "github",
+    name: repo.name,
+    repository: `${repo.owner}/${repo.name}`,
+    branch: repo.defaultBranch || "main",
+    owner: repo.owner,
+  };
+}
 
-const AccountChip = ({
+function AccountChip({
   account,
   style,
   active,
@@ -407,7 +421,7 @@ const AccountChip = ({
   style: { icon: React.ComponentType<{ className?: string }>; color: string };
   active: boolean;
   onClick: () => void;
-}) => {
+}) {
   const Icon = style.icon;
   return (
     <button
@@ -427,98 +441,112 @@ const AccountChip = ({
       <span className="text-[13px] font-medium th-text-strong">{account.login}</span>
     </button>
   );
-};
+}
 
-const RepoRow = ({ repo, onClick }: { repo: GitRepo; onClick: () => void }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    title="导入此仓库"
-    className="group flex w-full cursor-pointer items-center gap-3 border-b border-[var(--th-divider)] px-5 py-3 text-left transition-colors last:border-b-0 hover:bg-[var(--th-sf-03)]"
-  >
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[var(--th-on-04)]">
-      {repo.private ? (
-        <Lock className="h-4 w-4 th-text-secondary" />
-      ) : (
-        <Globe className="h-4 w-4 th-text-secondary" />
+function RepoRow({ repo, onClick }: { repo: GitRepo; onClick: () => void }) {
+  const now = useNow();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="导入此仓库"
+      className="group flex w-full cursor-pointer items-center gap-3 border-b border-[var(--th-divider)] px-5 py-3 text-left transition-colors last:border-b-0 hover:bg-[var(--th-sf-03)]"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[var(--th-on-04)]">
+        {repo.private
+          ? (
+              <Lock className="h-4 w-4 th-text-secondary" />
+            )
+          : (
+              <Globe className="h-4 w-4 th-text-secondary" />
+            )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span className="text-sm font-semibold th-text-strong">{repo.name}</span>
+          {repo.private && (
+            <span className="rounded-md bg-[var(--th-on-05)] px-1.5 py-px text-[11px] th-text-muted">
+              私有
+            </span>
+          )}
+        </span>
+        <span className="mt-[3px] block truncate text-xs th-text-muted">
+          {repo.description ?? "—"}
+          {" "}
+          ·
+          {" "}
+          {formatRelativeTime(repo.updatedAt, now, "zh")}
+        </span>
+      </span>
+      {repo.language && (
+        <span className="flex shrink-0 items-center gap-1.5 text-xs th-text-secondary">
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: repo.languageColor ?? "var(--th-on-10)" }}
+          />
+          {repo.language}
+        </span>
       )}
-    </span>
-    <span className="min-w-0 flex-1">
-      <span className="flex items-center gap-1.5">
-        <span className="text-sm font-semibold th-text-strong">{repo.name}</span>
-        {repo.private && (
-          <span className="rounded-md bg-[var(--th-on-05)] px-1.5 py-px text-[11px] th-text-muted">
-            私有
-          </span>
-        )}
-      </span>
-      <span className="mt-[3px] block truncate text-xs th-text-muted">
-        {repo.description ?? "—"} ·{" "}
-        {formatRelativeTime(repo.updatedAt, new Date(), "zh")}
-      </span>
-    </span>
-    {repo.language && (
-      <span className="flex shrink-0 items-center gap-1.5 text-xs th-text-secondary">
-        <span
-          className="h-2 w-2 rounded-full"
-          style={{ backgroundColor: repo.languageColor ?? "var(--th-on-10)" }}
-        />
-        {repo.language}
-      </span>
-    )}
-    <ArrowRight className="h-4 w-4 shrink-0 th-text-hint" />
-  </button>
-);
+      <ArrowRight className="h-4 w-4 shrink-0 th-text-hint" />
+    </button>
+  );
+}
 
-const RepoSkeleton = () => (
-  <div className="flex flex-col">
-    {Array.from({ length: 6 }).map((_, i) => (
-      <div
-        key={i}
-        className="flex items-center gap-3 border-b border-[var(--th-divider)] px-5 py-3 last:border-b-0"
-      >
-        <div className="h-9 w-9 shrink-0 animate-pulse rounded-[10px] bg-[var(--th-on-04)]" />
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="h-3 w-32 animate-pulse rounded bg-[var(--th-on-04)]" />
-          <div className="h-2.5 w-56 animate-pulse rounded bg-[var(--th-on-04)]" />
+function RepoSkeleton() {
+  return (
+    <div className="flex flex-col">
+      {["a", "b", "c", "d", "e", "f"].map(id => (
+        <div
+          key={id}
+          className="flex items-center gap-3 border-b border-[var(--th-divider)] px-5 py-3 last:border-b-0"
+        >
+          <div className="h-9 w-9 shrink-0 animate-pulse rounded-[10px] bg-[var(--th-on-04)]" />
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <div className="h-3 w-32 animate-pulse rounded bg-[var(--th-on-04)]" />
+            <div className="h-2.5 w-56 animate-pulse rounded bg-[var(--th-on-04)]" />
+          </div>
         </div>
-      </div>
-    ))}
-  </div>
-);
+      ))}
+    </div>
+  );
+}
 
-const RepoErrorState = ({
+function RepoErrorState({
   message,
   onRetry,
 }: {
   message: string;
   onRetry: () => void;
-}) => (
-  <div className="flex h-full flex-col items-center justify-center gap-3.5">
-    <RepoEmptyIllustration />
-    <h3 className="text-lg font-medium th-text-title">仓库列表加载失败</h3>
-    <p className="max-w-[360px] text-center text-[13px] th-text-muted">{message}</p>
-    <button type="button" onClick={onRetry} className="th-btn th-btn-soft px-4 py-2">
-      重试
-    </button>
-  </div>
-);
+}) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3.5">
+      <RepoEmptyIllustration />
+      <h3 className="text-lg font-medium th-text-title">仓库列表加载失败</h3>
+      <p className="max-w-[360px] text-center text-[13px] th-text-muted">{message}</p>
+      <button type="button" onClick={onRetry} className="th-btn th-btn-soft px-4 py-2">
+        重试
+      </button>
+    </div>
+  );
+}
 
 /** Empty state for the GitHub tab — mirrors library-mock's "未找到仓库". */
-const RepoEmptyState = ({ filtered }: { filtered: boolean }) => (
-  <div className="flex h-full flex-col items-center justify-center gap-3.5">
-    <RepoEmptyIllustration />
-    <h3 className="text-lg font-medium th-text-title">
-      {filtered ? "未找到匹配的仓库" : "未找到仓库"}
-    </h3>
-    <p className="text-[13px] th-text-muted">
-      {filtered ? "换个关键词，或切换可见性过滤" : "此账户尚无任何仓库"}
-    </p>
-  </div>
-);
+function RepoEmptyState({ filtered }: { filtered: boolean }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3.5">
+      <RepoEmptyIllustration />
+      <h3 className="text-lg font-medium th-text-title">
+        {filtered ? "未找到匹配的仓库" : "未找到仓库"}
+      </h3>
+      <p className="text-[13px] th-text-muted">
+        {filtered ? "换个关键词，或切换可见性过滤" : "此账户尚无任何仓库"}
+      </p>
+    </div>
+  );
+}
 
 /** Right-hand column: connection, overview stats and tip cards. */
-const LibraryAside = ({ repos, status }: { repos: GitRepo[]; status: GithubStatus }) => {
+function LibraryAside({ repos, status }: { repos: GitRepo[]; status: GithubStatus }) {
   const queryClient = useQueryClient();
   const disconnect = useMutation({
     mutationFn: api.clearGithubToken,
@@ -530,11 +558,11 @@ const LibraryAside = ({ repos, status }: { repos: GitRepo[]; status: GithubStatu
         next.connected ? "已移除保存的令牌（gh CLI 仍保持连接）" : "已断开 GitHub 连接",
       );
     },
-    onError: (err) =>
+    onError: err =>
       toast.error(err instanceof ApiError ? err.message : "断开连接失败"),
   });
 
-  const pub = repos.filter((r) => !r.private).length;
+  const pub = repos.filter(r => !r.private).length;
   const viaToken = status.source === "token";
   return (
     <aside className="flex w-[268px] shrink-0 flex-col gap-4 overflow-y-auto">
@@ -546,17 +574,22 @@ const LibraryAside = ({ repos, status }: { repos: GitRepo[]; status: GithubStatu
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex items-center gap-2.5">
             <div className="th-bg-card-2 flex h-9 w-9 items-center justify-center rounded-lg">
-              {viaToken ? (
-                <KeyRound className="h-4 w-4 th-text-muted" />
-              ) : (
-                <Terminal className="h-4 w-4 th-text-muted" />
-              )}
+              {viaToken
+                ? (
+                    <KeyRound className="h-4 w-4 th-text-muted" />
+                  )
+                : (
+                    <Terminal className="h-4 w-4 th-text-muted" />
+                  )}
             </div>
             <div className="flex flex-col gap-0.5">
               <span className="text-[13px] font-medium th-text-strong">
                 {viaToken ? "个人令牌" : "gh CLI"}
               </span>
-              <span className="text-xs th-text-muted">@{status.login ?? "—"}</span>
+              <span className="text-xs th-text-muted">
+                @
+                {status.login ?? "—"}
+              </span>
             </div>
           </div>
           <span className="th-bg-card-2 flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium text-[var(--th-success-fg)]">
@@ -618,9 +651,9 @@ const LibraryAside = ({ repos, status }: { repos: GitRepo[]; status: GithubStatu
       </section>
     </aside>
   );
-};
+}
 
-const StatRow = ({
+function StatRow({
   icon: Icon,
   iconClass,
   label,
@@ -630,21 +663,23 @@ const StatRow = ({
   iconClass: string;
   label: string;
   value: number;
-}) => (
-  <div className="flex items-center gap-2.5">
-    <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${iconClass}`}>
-      <Icon className="h-3.5 w-3.5" />
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${iconClass}`}>
+        <Icon className="h-3.5 w-3.5" />
+      </div>
+      <span className="text-[13px] th-text-secondary">{label}</span>
+      <span className="ml-auto text-[15px] font-semibold tabular-nums th-text-title">
+        {value}
+      </span>
     </div>
-    <span className="text-[13px] th-text-secondary">{label}</span>
-    <span className="ml-auto text-[15px] font-semibold tabular-nums th-text-title">
-      {value}
-    </span>
-  </div>
-);
+  );
+}
 
 // ── Git URL tab ──────────────────────────────────────────────────────────
 
-const GIT_URL_RE = /^(?:(?:https?:\/\/)|git@)?(?:www\.)?([^/:]+)[/:]([^/]+)\/([^/#?.]+?)(?:\.git)?\/?$/;
+const GIT_URL_RE = /^(?:https?:\/\/|git@)?(?:www\.)?([^/:]+)[/:]([^/]+)\/([^/#?.]+)(?:\.git)?\/?$/;
 
 const PROVIDER_BY_HOST: Record<string, Provider> = {
   "github.com": "github",
@@ -652,11 +687,13 @@ const PROVIDER_BY_HOST: Record<string, Provider> = {
   "bitbucket.org": "bitbucket",
 };
 
-const parseGitUrl = (raw: string): CreateDraft | null => {
+function parseGitUrl(raw: string): CreateDraft | null {
   const value = raw.trim();
-  if (!value) return null;
+  if (!value)
+    return null;
   const match = GIT_URL_RE.exec(value);
-  if (!match) return null;
+  if (!match)
+    return null;
   const [, host, owner, name] = match;
   const provider = PROVIDER_BY_HOST[host.toLowerCase()];
   if (!provider) {
@@ -664,9 +701,9 @@ const parseGitUrl = (raw: string): CreateDraft | null => {
     return { provider: "local", name, repository: value, branch: "main" };
   }
   return { provider, name, repository: `${owner}/${name}`, branch: "main", owner };
-};
+}
 
-const UrlTab = ({ onCreate }: { onCreate: (draft: CreateDraft) => void }) => {
+function UrlTab({ onCreate }: { onCreate: (draft: CreateDraft) => void }) {
   const [value, setValue] = useState("");
   const parsed = useMemo(() => parseGitUrl(value), [value]);
 
@@ -685,7 +722,7 @@ const UrlTab = ({ onCreate }: { onCreate: (draft: CreateDraft) => void }) => {
             <Link2 className="h-4 w-4 shrink-0 th-text-secondary" />
             <input
               value={value}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={e => setValue(e.target.value)}
               placeholder="https://github.com/acme/atlas"
               className="w-full bg-transparent text-sm outline-none placeholder:th-text-muted"
             />
@@ -711,18 +748,22 @@ const UrlTab = ({ onCreate }: { onCreate: (draft: CreateDraft) => void }) => {
         {parsed && (
           <div className="th-bg-card-2 th-bd-default flex items-center gap-3 rounded-xl border px-3.5 py-3">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--th-on-04)]">
-              {parsed.provider === "github" ? (
-                <Github className="h-4 w-4 th-text-secondary" />
-              ) : (
-                <GitBranch className="h-4 w-4 th-text-secondary" />
-              )}
+              {parsed.provider === "github"
+                ? (
+                    <Github className="h-4 w-4 th-text-secondary" />
+                  )
+                : (
+                    <GitBranch className="h-4 w-4 th-text-secondary" />
+                  )}
             </span>
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-sm font-semibold th-text-strong">
                 {parsed.repository}
               </span>
               <span className="text-xs th-text-muted">
-                默认分支 {parsed.branch}
+                默认分支
+                {" "}
+                {parsed.branch}
               </span>
             </span>
             <span className="shrink-0 rounded-md bg-[var(--th-on-05)] px-1.5 py-px text-[11px] th-text-muted">
@@ -733,17 +774,17 @@ const UrlTab = ({ onCreate }: { onCreate: (draft: CreateDraft) => void }) => {
       </div>
     </section>
   );
-};
+}
 
 // ── Create-project dialog (shared by both import paths) ──────────────────
 
-const CreateProjectDialog = ({
+function CreateProjectDialog({
   draft,
   onClose,
 }: {
   draft: CreateDraft;
   onClose: () => void;
-}) => {
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<CreateProjectInput>({
@@ -774,7 +815,7 @@ const CreateProjectDialog = ({
       onClose();
       navigate(`/projects/${project.id}`);
     },
-    onError: (err) =>
+    onError: err =>
       toast.error(err instanceof ApiError ? err.message : "创建项目失败"),
   });
 
@@ -826,7 +867,7 @@ const CreateProjectDialog = ({
           <Field label="项目名称" error={errors.name}>
             <input
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={e => setForm({ ...form, name: e.target.value })}
               placeholder="my-awesome-project"
               className="th-input"
             />
@@ -835,41 +876,45 @@ const CreateProjectDialog = ({
           <Field label="仓库" error={errors.repository}>
             <input
               value={form.repository}
-              onChange={(e) => setForm({ ...form, repository: e.target.value })}
+              onChange={e => setForm({ ...form, repository: e.target.value })}
               placeholder="acme/atlas"
               className="th-input"
             />
           </Field>
 
           <Field label="分支" error={errors.branch}>
-            {branchOptions.length > 0 ? (
-              <select
-                value={form.branch}
-                onChange={(e) => setForm({ ...form, branch: e.target.value })}
-                className="th-input"
-              >
-                {!branchOptions.includes(form.branch) && (
-                  <option value={form.branch}>{form.branch}</option>
-                )}
-                {branchOptions.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            ) : branches.isFetching ? (
-              <div className="th-input flex items-center gap-2 text-xs th-text-muted">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                正在获取分支…
-              </div>
-            ) : (
-              <input
-                value={form.branch}
-                onChange={(e) => setForm({ ...form, branch: e.target.value })}
-                placeholder="main"
-                className="th-input"
-              />
-            )}
+            {branchOptions.length > 0
+              ? (
+                  <select
+                    value={form.branch}
+                    onChange={e => setForm({ ...form, branch: e.target.value })}
+                    className="th-input"
+                  >
+                    {!branchOptions.includes(form.branch) && (
+                      <option value={form.branch}>{form.branch}</option>
+                    )}
+                    {branchOptions.map(b => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                )
+              : branches.isFetching
+                ? (
+                    <div className="th-input flex items-center gap-2 text-xs th-text-muted">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      正在获取分支…
+                    </div>
+                  )
+                : (
+                    <input
+                      value={form.branch}
+                      onChange={e => setForm({ ...form, branch: e.target.value })}
+                      placeholder="main"
+                      className="th-input"
+                    />
+                  )}
           </Field>
         </div>
 
@@ -884,9 +929,9 @@ const CreateProjectDialog = ({
       </form>
     </div>
   );
-};
+}
 
-const Field = ({
+function Field({
   label,
   error,
   children,
@@ -894,13 +939,15 @@ const Field = ({
   label: string;
   error?: string;
   children: React.ReactNode;
-}) => (
-  <label className="block">
-    <span className="mb-1 block text-xs font-medium th-text-muted">{label}</span>
-    {children}
-    {error && <span className="mt-1 block text-xs text-red-500">{error}</span>}
-  </label>
-);
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium th-text-muted">{label}</span>
+      {children}
+      {error && <span className="mt-1 block text-xs text-red-500">{error}</span>}
+    </label>
+  );
+}
 
 const SOURCE_PLACEHOLDER: Record<Exclude<SourceTab, "github" | "url">, { title: string; desc: string }> = {
   folder: { title: "从本地文件夹导入", desc: "选择一个包含 Git 仓库的本地文件夹,Githelm 会识别其构建方式。" },
@@ -908,7 +955,7 @@ const SOURCE_PLACEHOLDER: Record<Exclude<SourceTab, "github" | "url">, { title: 
   server: { title: "从现有服务器导入", desc: "扫描已连接服务器上运行的服务,并将其纳管为项目。" },
 };
 
-const SourcePlaceholder = ({ tab }: { tab: Exclude<SourceTab, "github" | "url"> }) => {
+function SourcePlaceholder({ tab }: { tab: Exclude<SourceTab, "github" | "url"> }) {
   const copy = SOURCE_PLACEHOLDER[tab];
   return (
     <section className="th-card flex flex-1 flex-col items-center justify-center gap-2">
@@ -918,4 +965,4 @@ const SourcePlaceholder = ({ tab }: { tab: Exclude<SourceTab, "github" | "url"> 
       </p>
     </section>
   );
-};
+}
