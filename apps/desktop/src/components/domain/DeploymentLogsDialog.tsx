@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Terminal, X } from "lucide-react";
 import { toast } from "sonner";
-import type { Deployment } from "@githelm/core";
+import type { Deployment, LogEntry } from "@githelm/core";
 import { formatDuration } from "@githelm/core";
 import { api, ApiError } from "../../lib/api";
+import type { DeployStatusEvent } from "../../hooks/useDeployEvents";
 
 const STATUS_LABEL: Record<Deployment["status"], string> = {
   queued: "排队中",
@@ -31,39 +33,75 @@ export interface DeploymentLogsDialogProps {
   onClose: () => void;
 }
 
-/** Streams one deployment's pipeline output (logs are keyed by deployment id). */
+/**
+ * Follows one deployment's pipeline output. The seed comes from the logs
+ * table; while the pipeline runs, `deploy-log` events append lines live and
+ * `deploy-status` events update the badge — no polling.
+ */
 export const DeploymentLogsDialog = ({
   deploymentId,
   onClose,
 }: DeploymentLogsDialogProps) => {
   const scroller = useRef<HTMLDivElement>(null);
   const [cancelling, setCancelling] = useState(false);
+  /** Lines that arrived as events, in arrival order. */
+  const [liveLogs, setLiveLogs] = useState<LogEntry[]>([]);
+  /** Status seen via events, overriding the (older) fetched record. */
+  const [liveStatus, setLiveStatus] = useState<Deployment["status"] | null>(null);
 
   const deployment = useQuery({
     queryKey: ["deployment", deploymentId],
     queryFn: () => api.getDeployment(deploymentId),
-    refetchInterval: (query) =>
-      query.state.data?.status === "building" || query.state.data?.status === "deploying"
-        ? 2000
-        : false,
   });
   const logs = useQuery({
     queryKey: ["logs", deploymentId],
     queryFn: () => api.listLogs(deploymentId, 500),
-    refetchInterval: () => {
-      const dep = deployment.data;
-      return dep?.status === "building" || dep?.status === "deploying" ? 1500 : false;
-    },
   });
+
+  // New session per dialog; events for a previous deployment must not leak in.
+  useEffect(() => {
+    setLiveLogs([]);
+    setLiveStatus(null);
+    let alive = true;
+    const unLogs = listen<LogEntry>("deploy-log", (e) => {
+      if (alive && e.payload.targetId === deploymentId) {
+        setLiveLogs((prev) => [...prev, e.payload]);
+      }
+    });
+    const unStatus = listen<DeployStatusEvent>("deploy-status", (e) => {
+      if (alive && e.payload.deploymentId === deploymentId) {
+        setLiveStatus(e.payload.status);
+      }
+    });
+    return () => {
+      alive = false;
+      void unLogs.then((off) => off());
+      void unStatus.then((off) => off());
+    };
+  }, [deploymentId]);
+
+  // Merge seed + live lines, deduped by id: a refetch can catch up past the
+  // events, and both sources then overlap.
+  const allLogs = useMemo(() => {
+    const seen = new Set<string>();
+    const out: LogEntry[] = [];
+    for (const l of [...(logs.data ?? []), ...liveLogs]) {
+      if (seen.has(l.id)) continue;
+      seen.add(l.id);
+      out.push(l);
+    }
+    return out;
+  }, [logs.data, liveLogs]);
 
   // Stick to the tail as new lines stream in.
   useEffect(() => {
     const el = scroller.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [logs.data]);
+  }, [allLogs]);
 
   const dep = deployment.data;
-  const running = dep?.status === "building" || dep?.status === "deploying";
+  const status = liveStatus ?? dep?.status;
+  const running = status === "building" || status === "deploying";
 
   return (
     <div
@@ -83,11 +121,11 @@ export const DeploymentLogsDialog = ({
             )}
           </div>
           <div className="flex items-center gap-3">
-            {dep && (
-              <span className={`text-xs ${STATUS_COLOR[dep.status]}`}>
+            {status && (
+              <span className={`text-xs ${STATUS_COLOR[status]}`}>
                 {running && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
-                {STATUS_LABEL[dep.status]}
-                {dep.durationMs ? ` · ${formatDuration(dep.durationMs)}` : ""}
+                {STATUS_LABEL[status]}
+                {dep?.durationMs ? ` · ${formatDuration(dep.durationMs)}` : ""}
               </span>
             )}
             {running && (
@@ -132,12 +170,12 @@ export const DeploymentLogsDialog = ({
           ref={scroller}
           className="th-bg-inset flex min-h-[240px] flex-1 flex-col gap-px overflow-y-auto rounded-xl p-3 font-mono text-[11px] leading-relaxed"
         >
-          {(logs.data ?? []).length === 0 ? (
+          {allLogs.length === 0 ? (
             <span className="th-text-muted">
               {running ? "等待输出…" : "暂无日志。"}
             </span>
           ) : (
-            (logs.data ?? []).map((l) => (
+            allLogs.map((l) => (
               <span
                 key={l.id}
                 className={

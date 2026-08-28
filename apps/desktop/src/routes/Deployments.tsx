@@ -39,13 +39,8 @@ export const DeploymentsPage = () => {
   const deployments = useQuery({
     queryKey: ["deployments"],
     queryFn: () => api.listDeployments(undefined),
-    // Follow running pipelines in the list badges.
-    refetchInterval: (query) =>
-      query.state.data?.some(
-        (d) => d.status === "building" || d.status === "deploying",
-      )
-        ? 2000
-        : false,
+    // Status badges stay fresh via the deploy-status event subscription in
+    // useDeployEvents — no polling here.
   });
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.listProjects });
 

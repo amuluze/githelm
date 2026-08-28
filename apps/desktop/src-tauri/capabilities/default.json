@@ -15,6 +15,7 @@
     "core:app:allow-name",
     "os:default",
     "store:default",
+    "dialog:allow-open",
     "notification:default",
     "shell:default"
   ]

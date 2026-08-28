@@ -3,16 +3,19 @@
 //! the update command inside the deploy dir (e.g. compose pull + up -d).
 //!
 //! `deploy_project` validates the config, records the deployment and hands
-//! the actual work to a detached task; progress streams line-by-line into
-//! the logs table (target = deployment id) so the UI can poll it. A running
-//! pipeline can be cancelled through `cancel_deployment`, which kills the
-//! current child process and records the deployment as `cancelled`.
+//! the actual work to a detached task; progress is persisted line-by-line
+//! into the logs table (target = deployment id) AND pushed to the renderer
+//! as events (`deploy-log` per line, `deploy-status` per transition), so the
+//! UI follows live without polling. A running pipeline can be cancelled
+//! through `cancel_deployment`, which kills the current child process and
+//! records the deployment as `cancelled`.
 
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tauri::State;
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::watch;
@@ -24,6 +27,51 @@ use crate::storage;
 use crate::types::{
     Deployment, DeploymentStatus, LogEntry, LogLevel, Project, ProjectStatus, Server, ServerStatus,
 };
+
+/// Payload of the `deploy-status` event — one per pipeline transition.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeployStatusEvent {
+    deployment_id: String,
+    status: String,
+    project_name: String,
+}
+
+/// Event sink for pipeline progress. Commands wrap the real `AppHandle`;
+/// tests pass `DeployEmitter::default()` (no-op).
+#[derive(Clone, Default)]
+struct DeployEmitter {
+    app: Option<AppHandle>,
+}
+
+impl DeployEmitter {
+    fn emit_log(&self, entry: &LogEntry) {
+        if let Some(app) = &self.app {
+            let _ = app.emit("deploy-log", entry);
+        }
+    }
+
+    fn emit_status(&self, dep: &Deployment, project_name: &str) {
+        let Some(app) = &self.app else { return };
+        let status = match dep.status {
+            DeploymentStatus::Queued => "queued",
+            DeploymentStatus::Building => "building",
+            DeploymentStatus::Deploying => "deploying",
+            DeploymentStatus::Live => "live",
+            DeploymentStatus::Failed => "failed",
+            DeploymentStatus::Cancelled => "cancelled",
+            DeploymentStatus::RolledBack => "rolled-back",
+        };
+        let _ = app.emit(
+            "deploy-status",
+            DeployStatusEvent {
+                deployment_id: dep.id.clone(),
+                status: status.into(),
+                project_name: project_name.into(),
+            },
+        );
+    }
+}
 
 #[tauri::command]
 pub fn list_deployments(
@@ -69,9 +117,11 @@ fn validate_config(project: &Project) -> AppResult<()> {
 }
 
 /// Kicks off a deployment and returns immediately with the building record;
-/// the pipeline runs in a detached task and reports through the logs table.
+/// the pipeline runs in a detached task and reports through the logs table
+/// and `deploy-log` / `deploy-status` events.
 #[tauri::command]
 pub async fn deploy_project(
+    app: AppHandle,
     state: State<'_, AppState>,
     project_id: String,
 ) -> AppResult<Deployment> {
@@ -120,10 +170,14 @@ pub async fn deploy_project(
             .map_err(|e| AppError::Internal(format!("commit: {e}")))?;
     }
 
+    let emitter = DeployEmitter { app: Some(app) };
+    emitter.emit_status(&dep, &project.name);
+
     let db = state.db.clone();
     let deploys = state.deploys.clone();
     let task_dep = dep.clone();
     let task_dep_id = dep.id.clone();
+    let project_name = project.name.clone();
     let local_path = project.local_path.clone().unwrap_or_default();
     let build_command = project.build_command.clone().unwrap_or_default();
     let deploy_dir = project.deploy_dir.clone().unwrap_or_default();
@@ -140,8 +194,10 @@ pub async fn deploy_project(
 
     tokio::spawn(async move {
         run_pipeline(
+            emitter.clone(),
             db.clone(),
             task_dep,
+            project_name,
             local_path,
             build_command,
             server,
@@ -218,8 +274,10 @@ async fn git_query(path: &str, args: &[&str]) -> Option<String> {
 
 #[allow(clippy::too_many_arguments)]
 async fn run_pipeline(
+    emitter: DeployEmitter,
     db: Arc<Mutex<rusqlite::Connection>>,
     mut dep: Deployment,
+    project_name: String,
     local_path: String,
     build_command: String,
     server: Server,
@@ -229,6 +287,7 @@ async fn run_pipeline(
 ) {
     let start = Instant::now();
     log_line(
+        &emitter,
         &db,
         &dep.id,
         LogLevel::Info,
@@ -246,15 +305,16 @@ async fn run_pipeline(
         .arg(&build_command)
         .current_dir(&local_path);
     let build_title = format!("cd {local_path} && {build_command}");
-    let outcome = run_streamed(&db, &dep.id, &build_title, build, &mut cancel).await;
+    let outcome = run_streamed(&emitter, &db, &dep.id, &build_title, build, &mut cancel).await;
     if outcome.is_err() {
-        finish_terminal(&db, &mut dep, start, outcome).await;
+        finish_terminal(&emitter, &db, &mut dep, &project_name, start, outcome).await;
         return;
     }
 
     // Cancelled between steps: skip the remote half.
     if *cancel.borrow() {
-        finish_terminal(&db, &mut dep, start, Err(AppError::Cancelled)).await;
+        finish_terminal(&emitter, &db, &mut dep, &project_name, start, Err(AppError::Cancelled))
+            .await;
         return;
     }
 
@@ -266,10 +326,11 @@ async fn run_pipeline(
             eprintln!("[githelm] update deployment: {err}");
         }
     }
+    emitter.emit_status(&dep, &project_name);
     let mut ssh = ssh_command(&server);
     ssh.arg(format!("cd {deploy_dir} && {update_command}"));
     let remote_title = format!("ssh {} 'cd {deploy_dir} && {update_command}'", server.host);
-    let outcome = run_streamed(&db, &dep.id, &remote_title, ssh, &mut cancel).await;
+    let outcome = run_streamed(&emitter, &db, &dep.id, &remote_title, ssh, &mut cancel).await;
 
     match outcome {
         Ok(()) => {
@@ -277,27 +338,32 @@ async fn run_pipeline(
             dep.finished_at = Some(chrono::Utc::now().to_rfc3339());
             dep.duration_ms = Some(start.elapsed().as_millis() as u64);
             let duration = dep.duration_ms.unwrap_or_default();
-            let conn = db.lock().expect("db mutex");
-            if let Err(err) = storage::update_deployment(&conn, &dep, ProjectStatus::Running) {
-                eprintln!("[githelm] update deployment: {err}");
+            {
+                let conn = db.lock().expect("db mutex");
+                if let Err(err) = storage::update_deployment(&conn, &dep, ProjectStatus::Running) {
+                    eprintln!("[githelm] update deployment: {err}");
+                }
+                if let Err(err) = storage::set_server_status(
+                    &conn,
+                    &server.id,
+                    &ServerStatus::Online,
+                    &chrono::Utc::now().to_rfc3339(),
+                ) {
+                    eprintln!("[githelm] set server status: {err}");
+                }
             }
-            if let Err(err) = storage::set_server_status(
-                &conn,
-                &server.id,
-                &ServerStatus::Online,
-                &chrono::Utc::now().to_rfc3339(),
-            ) {
-                eprintln!("[githelm] set server status: {err}");
-            }
-            drop(conn);
+            emitter.emit_status(&dep, &project_name);
             log_line(
+                &emitter,
                 &db,
                 &dep.id,
                 LogLevel::Info,
                 &format!("部署完成，用时 {duration}ms"),
             );
         }
-        Err(err) => finish_terminal(&db, &mut dep, start, Err(err)).await,
+        Err(err) => {
+            finish_terminal(&emitter, &db, &mut dep, &project_name, start, Err(err)).await
+        }
     }
 }
 
@@ -306,13 +372,14 @@ async fn run_pipeline(
 /// requested; kill_on_drop keeps a dropped task from leaving an orphaned
 /// build behind.
 async fn run_streamed(
+    emitter: &DeployEmitter,
     db: &Arc<Mutex<rusqlite::Connection>>,
     deployment_id: &str,
     title: &str,
     mut cmd: Command,
     cancel: &mut watch::Receiver<bool>,
 ) -> AppResult<()> {
-    log_line(db, deployment_id, LogLevel::Info, &format!("$ {title}"));
+    log_line(emitter, db, deployment_id, LogLevel::Info, &format!("$ {title}"));
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -324,11 +391,13 @@ async fn run_streamed(
     // Pipes are pumped on their own tasks so select! can poll the wait and
     // the cancellation channel concurrently.
     let stdout = tokio::spawn(read_pipe(
+        emitter.clone(),
         db.clone(),
         deployment_id.to_string(),
         child.stdout.take(),
     ));
     let stderr = tokio::spawn(read_pipe(
+        emitter.clone(),
         db.clone(),
         deployment_id.to_string(),
         child.stderr.take(),
@@ -384,6 +453,7 @@ async fn wait_cancelled(cancel: &mut watch::Receiver<bool>) -> bool {
 }
 
 async fn read_pipe<R: tokio::io::AsyncRead + Unpin>(
+    emitter: DeployEmitter,
     db: Arc<Mutex<rusqlite::Connection>>,
     deployment_id: String,
     pipe: Option<R>,
@@ -391,7 +461,7 @@ async fn read_pipe<R: tokio::io::AsyncRead + Unpin>(
     let Some(pipe) = pipe else { return };
     let mut lines = BufReader::new(pipe).lines();
     while let Ok(Some(line)) = lines.next_line().await {
-        log_line(&db, &deployment_id, LogLevel::Info, &line);
+        log_line(&emitter, &db, &deployment_id, LogLevel::Info, &line);
     }
 }
 
@@ -399,8 +469,10 @@ async fn read_pipe<R: tokio::io::AsyncRead + Unpin>(
 /// the deployment to `cancelled` and the project back to `idle` (it can be
 /// re-deployed right away); any other error marks both failed.
 async fn finish_terminal(
+    emitter: &DeployEmitter,
     db: &Arc<Mutex<rusqlite::Connection>>,
     dep: &mut Deployment,
+    project_name: &str,
     start: Instant,
     result: AppResult<()>,
 ) {
@@ -410,7 +482,7 @@ async fn finish_terminal(
         Err(err) => (LogLevel::Error, format!("部署失败：{err}")),
         Ok(()) => return,
     };
-    log_line(db, &dep.id, level, &message);
+    log_line(emitter, db, &dep.id, level, &message);
     dep.status = if cancelled {
         DeploymentStatus::Cancelled
     } else {
@@ -423,10 +495,13 @@ async fn finish_terminal(
     } else {
         ProjectStatus::Error
     };
-    let conn = db.lock().expect("db mutex");
-    if let Err(log_err) = storage::update_deployment(&conn, dep, project_status) {
-        eprintln!("[githelm] update deployment: {log_err}");
+    {
+        let conn = db.lock().expect("db mutex");
+        if let Err(log_err) = storage::update_deployment(&conn, dep, project_status) {
+            eprintln!("[githelm] update deployment: {log_err}");
+        }
     }
+    emitter.emit_status(dep, project_name);
 }
 
 /// System ssh with non-interactive auth (agent / default keys / ssh_config).
@@ -457,6 +532,7 @@ pub(crate) fn ssh_command(server: &Server) -> Command {
 }
 
 fn log_line(
+    emitter: &DeployEmitter,
     db: &Arc<Mutex<rusqlite::Connection>>,
     deployment_id: &str,
     level: LogLevel,
@@ -477,10 +553,13 @@ fn log_line(
         message: message.to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     };
-    let conn = db.lock().expect("db mutex");
-    if let Err(err) = storage::insert_log(&conn, &entry) {
-        eprintln!("[githelm] insert log: {err}");
+    {
+        let conn = db.lock().expect("db mutex");
+        if let Err(err) = storage::insert_log(&conn, &entry) {
+            eprintln!("[githelm] insert log: {err}");
+        }
     }
+    emitter.emit_log(&entry);
 }
 
 /// End-to-end pipeline smoke: an `echo` build succeeds (stdout lands in the
@@ -563,8 +642,10 @@ mod tests {
         };
         let (_cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
         run_pipeline(
+            DeployEmitter::default(),
             db.clone(),
             dep.clone(),
+            "T".into(),
             std::env::temp_dir().display().to_string(),
             "echo build-line-1 && echo build-line-2".into(),
             server,
@@ -662,8 +743,10 @@ mod tests {
 
         let started = std::time::Instant::now();
         run_pipeline(
+            DeployEmitter::default(),
             db.clone(),
             dep.clone(),
+            "C".into(),
             std::env::temp_dir().display().to_string(),
             "echo cancel-me-started && sleep 60".into(),
             unreachable_server(),

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   ArrowUp,
   File as FileIcon,
@@ -48,6 +49,18 @@ export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps)
   const [form, setForm] = useState<DeployConfigForm>(() => configOf(project));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [browsing, setBrowsing] = useState(false);
+
+  /** Native folder picker; keeps the typed path when the dialog is cancelled. */
+  const pickFolder = async () => {
+    try {
+      const picked = await open({ directory: true, multiple: false });
+      if (typeof picked === "string" && picked) {
+        setForm((f) => ({ ...f, localPath: picked }));
+      }
+    } catch {
+      // A failed native dialog is not actionable — keep manual input.
+    }
+  };
 
   const start = useMutation({
     mutationFn: async () => {
@@ -123,12 +136,22 @@ export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps)
 
         <div className="space-y-3">
           <Field label="本地路径（含 Dockerfile / Taskfile 的目录）" error={errors.localPath}>
-            <input
-              value={form.localPath}
-              onChange={(e) => setForm({ ...form, localPath: e.target.value })}
-              placeholder="/Users/you/projects/my-app"
-              className="th-input font-mono text-[13px]"
-            />
+            <div className="flex gap-1.5">
+              <input
+                value={form.localPath}
+                onChange={(e) => setForm({ ...form, localPath: e.target.value })}
+                placeholder="/Users/you/projects/my-app"
+                className="th-input font-mono text-[13px]"
+              />
+              <button
+                type="button"
+                onClick={pickFolder}
+                title="选择本地文件夹"
+                className="th-btn th-btn-soft shrink-0 px-2.5"
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </Field>
 
           <div className="grid grid-cols-2 gap-3">

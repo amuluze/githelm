@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deployment cancellation: kills the running command and records the
   deployment as `cancelled` (project returns to `idle`)
 - Interactive SSH terminal page (PTY-backed `ssh` + xterm.js, resize-aware)
+- Deploy progress is now pushed to the UI as events (`deploy-log` per output
+  line, `deploy-status` per transition), replacing 1.5–2s polling in the
+  deployments list, project page and log viewer
+- OS notification when a deployment succeeds / fails / is cancelled while
+  the window is hidden (permission-aware via the notification plugin)
+- Native folder picker for the deploy dialog's local path
+  (`tauri-plugin-dialog`, `dialog:allow-open` capability)
+- The servers page probes every server's connection once per visit, so
+  online/offline badges and last-seen times stay fresh (per-row test button
+  unchanged)
 - Project management: rename (slug follows), branch / URL editing and
   deletion (cascades deployments and their logs) from the project page
 - Stored SSH private keys are now actually used: they are materialized to

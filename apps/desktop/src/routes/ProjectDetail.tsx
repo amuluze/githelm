@@ -57,13 +57,8 @@ export const ProjectDetailPage = () => {
     queryKey: ["deployments", id],
     queryFn: () => api.listDeployments(id),
     enabled: Boolean(id),
-    // Keep status badges fresh while a pipeline is running.
-    refetchInterval: (query) =>
-      query.state.data?.some(
-        (d) => d.status === "building" || d.status === "deploying",
-      )
-        ? 2000
-        : false,
+    // Badges refresh via the deploy-status event subscription instead of
+    // polling.
   });
 
   const invalidateProject = () => {

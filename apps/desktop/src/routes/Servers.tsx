@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, ExternalLink, Plus, Server, X } from "lucide-react";
+import { BookOpen, ExternalLink, Loader2, Plus, Server, X } from "lucide-react";
 import { toast } from "sonner";
 import type { AddServerInput, Server as ServerModel, UpdateServerInput } from "@githelm/core";
 import { addServerSchema, updateServerSchema } from "@githelm/core";
@@ -15,8 +15,28 @@ export const ServersPage = () => {
   const queryClient = useQueryClient();
   const [showDialog, setShowDialog] = useState(false);
   const [editing, setEditing] = useState<ServerModel | null>(null);
+  const [probing, setProbing] = useState(false);
+  /** Guards against re-probing when the invalidated query re-runs the effect. */
+  const probedRef = useRef(false);
 
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.listServers });
+
+  // Probe every server once per page visit so online/offline badges and
+  // last-seen times don't go stale. An unreachable server is an expected
+  // outcome — the Rust command records the Error status either way — so
+  // rejections are swallowed (the per-row button still reports verbosely).
+  useEffect(() => {
+    const list = servers.data;
+    if (probedRef.current || !list || list.length === 0) return;
+    probedRef.current = true;
+    setProbing(true);
+    void Promise.allSettled(list.map((s) => api.testServerConnection(s.id))).then(
+      () => {
+        void queryClient.invalidateQueries({ queryKey: ["servers"] });
+        setProbing(false);
+      },
+    );
+  }, [servers.data, queryClient]);
 
   const remove = useMutation({
     mutationFn: api.removeServer,
@@ -67,6 +87,12 @@ export const ServersPage = () => {
             <Server className="h-[15px] w-[15px]" />
             服务器
           </button>
+          {probing && (
+            <span className="flex items-center gap-1.5 text-xs th-text-muted">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              正在检测连接状态…
+            </span>
+          )}
         </div>
 
         {servers.isLoading ? (
