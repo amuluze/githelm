@@ -430,6 +430,8 @@ async fn finish_terminal(
 }
 
 /// System ssh with non-interactive auth (agent / default keys / ssh_config).
+/// A server with a stored private key gets `-i` + IdentitiesOnly so the
+/// exact saved identity is offered — deterministic for unattended runs.
 pub(crate) fn ssh_command(server: &Server) -> Command {
     let user = server
         .username
@@ -446,8 +448,11 @@ pub(crate) fn ssh_command(server: &Server) -> Command {
         "ConnectTimeout=10",
         "-o",
         "StrictHostKeyChecking=accept-new",
-    ])
-    .arg(format!("{user}@{}", server.host));
+    ]);
+    if let Some(key) = super::servers::stored_key_path(&server.id) {
+        cmd.arg("-i").arg(key).args(["-o", "IdentitiesOnly=yes"]);
+    }
+    cmd.arg(format!("{user}@{}", server.host));
     cmd
 }
 

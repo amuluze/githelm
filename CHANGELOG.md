@@ -25,15 +25,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deployment cancellation: kills the running command and records the
   deployment as `cancelled` (project returns to `idle`)
 - Interactive SSH terminal page (PTY-backed `ssh` + xterm.js, resize-aware)
+- Project management: rename (slug follows), branch / URL editing and
+  deletion (cascades deployments and their logs) from the project page
+- Stored SSH private keys are now actually used: they are materialized to
+  `~/.githelm/keys/<id>.key` (0600) and offered via `-i` to deploy, connection
+  test and terminal; server credentials are optional (blank = host ssh config)
 - Log retention: the logs table is pruned to the newest 5,000 entries at
   startup and after each deployment finishes
 - OS keychain integration via `keyring` crate
 
 ### Changed
 
+- Command errors now surface their real message in the UI (previously every
+  toast showed "[object Object]"); messages no longer carry internal
+  English prefixes
+
 ### Fixed
 
 - The deployments page "已取消" filter tab now matches the real `cancelled`
   status instead of `rolled-back`
+- SSH private keys pasted into the server form no longer lose their
+  newlines (multiline textarea instead of a password input)
 
 ### Security

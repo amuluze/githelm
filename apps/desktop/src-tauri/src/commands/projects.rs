@@ -4,7 +4,9 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use crate::storage;
-use crate::types::{CreateProjectInput, Project, ProjectStatus, UpdateProjectConfigInput};
+use crate::types::{
+    CreateProjectInput, Project, ProjectStatus, UpdateProjectConfigInput, UpdateProjectInput,
+};
 
 #[tauri::command]
 pub fn list_projects(state: State<'_, AppState>) -> AppResult<Vec<Project>> {
@@ -46,6 +48,50 @@ pub fn update_project_config(
 pub fn get_project(state: State<'_, AppState>, id: String) -> AppResult<Project> {
     let conn = state.db.lock().expect("db mutex");
     storage::get_project(&conn, &id)?.ok_or_else(|| AppError::NotFound(format!("project {id}")))
+}
+
+/// Renames a project / changes its tracked branch or URL. The repository
+/// binding is immutable — it identifies what was imported; the slug follows
+/// the name.
+#[tauri::command]
+pub fn update_project(
+    state: State<'_, AppState>,
+    input: UpdateProjectInput,
+) -> AppResult<Project> {
+    let name = input.name.trim().to_string();
+    if name.is_empty() {
+        return Err(AppError::Validation("项目名称不能为空".into()));
+    }
+    let branch = input.branch.trim().to_string();
+    if branch.is_empty() {
+        return Err(AppError::Validation("分支不能为空".into()));
+    }
+
+    let updated = {
+        let conn = state.db.lock().expect("db mutex");
+        let mut project = storage::get_project(&conn, &input.project_id)?
+            .ok_or_else(|| AppError::NotFound(format!("project {}", input.project_id)))?;
+        project.name = name;
+        project.slug = slugify(&project.name);
+        project.branch = branch;
+        project.url = input.url.filter(|u| !u.trim().is_empty());
+        if !storage::update_project(&conn, &project)? {
+            return Err(AppError::NotFound(format!("project {}", input.project_id)));
+        }
+        project
+    };
+    Ok(updated)
+}
+
+/// Removes a project, its deployments and their logs. Server configs are
+/// left untouched — they are shared infrastructure, not project data.
+#[tauri::command]
+pub fn delete_project(state: State<'_, AppState>, project_id: String) -> AppResult<()> {
+    let mut conn = state.db.lock().expect("db mutex");
+    if !storage::delete_project(&mut conn, &project_id)? {
+        return Err(AppError::NotFound(format!("project {project_id}")));
+    }
+    Ok(())
 }
 
 /// "Create project" / "Import from GitHub" — the only writer of the projects

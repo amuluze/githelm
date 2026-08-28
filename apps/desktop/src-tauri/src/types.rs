@@ -162,7 +162,11 @@ pub struct AddServerInput {
     pub kind: ServerKind,
     pub region: Option<String>,
     pub username: String,
-    /// Stored via the keychain under `server:{id}`; never persisted in SQLite.
+    /// Optional. An SSH private key is stored in the keychain AND
+    /// materialized to `~/.githelm/keys/<id>.key` (0600) so ssh can offer
+    /// it; a password stays keychain-only (usable in the interactive
+    /// terminal). Empty = rely on the host's ssh config / agent.
+    #[serde(default)]
     pub credential: String,
     #[serde(default = "default_ssh_port")]
     pub port: u16,
@@ -199,6 +203,17 @@ pub struct UpdateProjectConfigInput {
     pub deploy_dir: Option<String>,
     pub build_command: Option<String>,
     pub update_command: Option<String>,
+}
+
+/// Rewrites a project's display fields. The repository binding is immutable —
+/// it identifies what was imported.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProjectInput {
+    pub project_id: String,
+    pub name: String,
+    pub branch: String,
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

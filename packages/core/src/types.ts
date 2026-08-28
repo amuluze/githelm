@@ -142,8 +142,10 @@ export const addServerSchema = z.object({
   kind: z.enum(["ssh", "cloud"]),
   region: z.string().optional(),
   username: z.string().min(1, "Username is required"),
-  /** Plaintext credential; never returned to the renderer after save. */
-  credential: z.string().min(1, "Credential is required"),
+  /** Plaintext credential; stored in the OS keychain and, when it is an SSH
+   *  private key, offered to ssh automatically. Optional — blank means the
+   *  connection relies on the host's ssh config / agent. */
+  credential: z.string().optional(),
   port: z.coerce.number().int().min(1).max(65535).default(22),
 });
 
@@ -198,6 +200,16 @@ export const createProjectSchema = z.object({
 });
 
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
+
+/** Rewrites a project's display fields; the repository binding is immutable. */
+export const updateProjectSchema = z.object({
+  projectId: z.string().min(1),
+  name: z.string().min(1, "项目名称不能为空").max(60, "名称最长 60 个字符"),
+  branch: z.string().min(1, "分支不能为空"),
+  url: z.string().optional(),
+});
+
+export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 
 /* ─── IPC contract mirrors ──────────────────────────────────────────────── */
 

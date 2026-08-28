@@ -22,6 +22,7 @@ import type {
   Server,
   ServerDirListing,
   UpdateProjectConfigInput,
+  UpdateProjectInput,
   UpdateServerInput,
   UpdateStatus,
 } from "@githelm/core";
@@ -45,6 +46,25 @@ export class ApiError extends Error {
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+/** Tauri command errors arrive as the serialized Rust payload
+ *  ({message, code}) — a plain object, not an Error instance. Unwrap it so
+ *  the actual message reaches toasts instead of "[object Object]". */
+const toApiError = (err: unknown): ApiError => {
+  if (err instanceof Error) {
+    return new ApiError(err.message);
+  }
+  if (typeof err === "object" && err !== null) {
+    const payload = err as { message?: unknown; code?: unknown };
+    if (typeof payload.message === "string" && payload.message !== "") {
+      return new ApiError(
+        payload.message,
+        typeof payload.code === "string" ? payload.code : undefined,
+      );
+    }
+  }
+  return new ApiError(String(err));
+};
+
 const call = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
   if (!isTauri) {
     return fallback<T>(cmd, args);
@@ -52,10 +72,7 @@ const call = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   try {
     return await invoke<T>(cmd, args);
   } catch (err) {
-    if (err instanceof Error) {
-      throw new ApiError(err.message);
-    }
-    throw new ApiError(String(err));
+    throw toApiError(err);
   }
 };
 
@@ -114,6 +131,12 @@ export const api = {
   /** Saves deploy pipeline config and returns the refreshed project. */
   updateProjectConfig: (input: UpdateProjectConfigInput) =>
     call<Project>("update_project_config", { input }),
+  /** Renames a project / changes branch or URL (repository is immutable). */
+  updateProject: (input: UpdateProjectInput) =>
+    call<Project>("update_project", { input }),
+  /** Removes the project, its deployments and their logs. */
+  deleteProject: (projectId: string) =>
+    call<void>("delete_project", { projectId }),
 
   // ── Deployments ──────────────────────────────────────────────────────
   listDeployments: (projectId?: string) =>

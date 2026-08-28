@@ -3,22 +3,24 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
-    #[error("not found: {0}")]
+    #[error("{0}")]
     NotFound(String),
-    #[error("validation failed: {0}")]
+    #[error("{0}")]
     Validation(String),
     /// A running deploy pipeline was stopped by the user; never surfaced to
     /// the renderer as an error — the pipeline turns it into a log line and
     /// a `cancelled` deployment status.
     #[error("cancelled")]
     Cancelled,
-    #[error("internal error: {0}")]
+    #[error("{0}")]
     Internal(String),
 }
 
 /// Tauri commands need errors that serialize as a string. We collapse every
 /// variant into a single `message` so the renderer never has to discriminate
-/// across variants — it only needs to know what to show the user.
+/// across variants — it only needs to know what to show the user. Messages
+/// travel bare (no variant prefix): they are user-facing copy and are mostly
+/// written in Chinese.
 #[derive(Debug, Serialize)]
 struct AppErrorPayload {
     message: String,
@@ -31,7 +33,12 @@ impl serde::Serialize for AppError {
         S: serde::Serializer,
     {
         let payload = AppErrorPayload {
-            message: self.to_string(),
+            message: match self {
+                AppError::NotFound(s) | AppError::Validation(s) | AppError::Internal(s) => {
+                    s.clone()
+                }
+                AppError::Cancelled => "已取消".into(),
+            },
             code: match self {
                 AppError::NotFound(_) => "NOT_FOUND",
                 AppError::Validation(_) => "VALIDATION",

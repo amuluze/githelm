@@ -122,6 +122,8 @@ pub fn run() {
             commands::projects::list_projects,
             commands::projects::get_project,
             commands::projects::create_project,
+            commands::projects::update_project,
+            commands::projects::delete_project,
             commands::projects::update_project_config,
             commands::github::github_status,
             commands::github::save_github_token,

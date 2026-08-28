@@ -289,6 +289,40 @@ fn blank_to_null(v: Option<&str>) -> Option<&str> {
     v.map(str::trim).filter(|s| !s.is_empty())
 }
 
+/// Rewrites a project's display fields (name / slug / branch / url). Returns
+/// false when no row matched, so callers can raise NotFound.
+pub fn update_project(conn: &Connection, p: &Project) -> AppResult<bool> {
+    let changed = conn
+        .execute(
+            "UPDATE projects SET name = ?2, slug = ?3, branch = ?4, url = ?5 WHERE id = ?1",
+            params![p.id, p.name, p.slug, p.branch, p.url],
+        )
+        .map_err(sql_err("update project"))?;
+    Ok(changed > 0)
+}
+
+/// Removes a project together with its deployments (FK cascade) and every
+/// log line those deployments wrote. Returns false when no row matched.
+pub fn delete_project(conn: &mut Connection, id: &str) -> AppResult<bool> {
+    let tx = conn
+        .transaction()
+        .map_err(|e| AppError::Internal(format!("begin: {e}")))?;
+    tx.execute(
+        "DELETE FROM logs WHERE target_id IN
+             (SELECT id FROM deployments WHERE project_id = ?1)",
+        params![id],
+    )
+    .map_err(sql_err("delete project logs"))?;
+    tx.execute("DELETE FROM logs WHERE target_id = ?1", params![id])
+        .map_err(sql_err("delete project logs"))?;
+    let deleted = tx
+        .execute("DELETE FROM projects WHERE id = ?1", params![id])
+        .map_err(sql_err("delete project"))?;
+    tx.commit()
+        .map_err(|e| AppError::Internal(format!("commit: {e}")))?;
+    Ok(deleted > 0)
+}
+
 /// Bookkeeping when a deployment is triggered: bump the counter, point the
 /// latest pointer at the new row and flip the project to building.
 pub fn apply_triggered_deployment(
@@ -876,6 +910,77 @@ mod tests {
         assert!(list_logs(&conn, Some("srv_other"), 10).unwrap().is_empty());
         let all = list_logs(&conn, None, 100).unwrap();
         assert_eq!(all.len(), 5);
+    }
+
+    #[test]
+    fn update_and_delete_project() {
+        let mut conn = test_conn();
+        let mut project = Project {
+            id: "prj_d".into(),
+            name: "Old Name".into(),
+            slug: "old-name".into(),
+            repository: "acme/d".into(),
+            branch: "main".into(),
+            status: ProjectStatus::Idle,
+            latest_deployment_id: None,
+            created_at: "2026-08-01T00:00:00Z".into(),
+            url: None,
+            deployment_count: 0,
+            provider: Provider::Github,
+            local_path: None,
+            server_id: None,
+            deploy_dir: None,
+            build_command: None,
+            update_command: None,
+        };
+        insert_project(&conn, &project).unwrap();
+
+        let dep = Deployment {
+            id: "dep_d".into(),
+            project_id: "prj_d".into(),
+            commit_sha: "a8f3d21".into(),
+            commit_message: "feat: x".into(),
+            author: "ada".into(),
+            status: DeploymentStatus::Live,
+            started_at: "2026-08-19T04:00:00Z".into(),
+            finished_at: None,
+            duration_ms: None,
+        };
+        insert_deployment(&conn, &dep).unwrap();
+        insert_log(
+            &conn,
+            &LogEntry {
+                id: "log_d".into(),
+                target_id: "dep_d".into(),
+                level: LogLevel::Info,
+                message: "line".into(),
+                timestamp: "2026-08-19T04:00:01Z".into(),
+            },
+        )
+        .unwrap();
+
+        // Rename re-slugs and updates branch/url; untouched fields survive.
+        project.name = "New Name!".into();
+        project.slug = "new-name".into();
+        project.branch = "develop".into();
+        project.url = Some("https://d.example.com".into());
+        assert!(update_project(&conn, &project).unwrap());
+        let stored = get_project(&conn, "prj_d").unwrap().unwrap();
+        assert_eq!(stored.name, "New Name!");
+        assert_eq!(stored.slug, "new-name");
+        assert_eq!(stored.branch, "develop");
+        assert_eq!(stored.url.as_deref(), Some("https://d.example.com"));
+        assert_eq!(stored.repository, "acme/d");
+
+        // Unknown id reports false.
+        assert!(!update_project(&conn, &Project { id: "nope".into(), ..project.clone() }).unwrap());
+
+        // Delete cascades: deployments and their logs are gone too.
+        assert!(delete_project(&mut conn, "prj_d").unwrap());
+        assert!(get_project(&conn, "prj_d").unwrap().is_none());
+        assert!(get_deployment(&conn, "dep_d").unwrap().is_none());
+        assert!(list_logs(&conn, Some("dep_d"), 10).unwrap().is_empty());
+        assert!(!delete_project(&mut conn, "prj_d").unwrap());
     }
 
     #[test]

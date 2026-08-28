@@ -207,15 +207,15 @@ const EditServerDialog = ({
             </Field>
           </div>
 
-          <Field label="凭据（留空则保留已保存的）" error={errors.credential}>
-            <input
-              type="password"
+          <Field label="SSH 私钥（留空保留已保存的）" error={errors.credential}>
+            <textarea
               value={form.credential ?? ""}
               onChange={(e) =>
                 setForm({ ...form, credential: e.target.value })
               }
-              placeholder="不修改请留空"
-              className="th-input"
+              rows={4}
+              placeholder="粘贴新的私钥内容；留空则不修改"
+              className="th-input resize-y font-mono text-[12px]"
             />
           </Field>
         </div>
@@ -377,17 +377,24 @@ const AddServerDialog = ({ onClose, onAdded }: AddServerDialogProps) => {
             </Field>
           </div>
 
-          <Field label="凭据(密钥或密码)" error={errors.credential}>
-            <input
-              type="password"
-              value={form.credential}
+          <Field
+            label="SSH 私钥（可选）"
+            error={errors.credential}
+          >
+            <textarea
+              value={form.credential ?? ""}
               onChange={(e) =>
                 setForm({ ...form, credential: e.target.value })
               }
-              placeholder="将存入系统钥匙串"
-              className="th-input"
+              rows={4}
+              placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n粘贴私钥内容，部署与终端将自动使用它；留空则使用系统 ssh 配置（agent / 默认密钥）"}
+              className="th-input resize-y font-mono text-[12px]"
             />
           </Field>
+          <p className="text-xs leading-relaxed th-text-muted">
+            私钥存入系统钥匙串，并在本机生成仅限当前用户读取的副本供 ssh
+            使用；密码类凭据仅在交互式终端中有用。
+          </p>
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
