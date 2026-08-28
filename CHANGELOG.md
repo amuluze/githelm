@@ -35,6 +35,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The servers page probes every server's connection once per visit, so
   online/offline badges and last-seen times stay fresh (per-row test button
   unchanged)
+- Route-level code splitting: the initial bundle drops from 830 kB to
+  364 kB (gzip 231 → 113 kB); xterm ships only with the terminal page
+- Frontend test infrastructure: vitest in `@githelm/core` (17 tests over
+  formatting helpers and Zod schemas), wired into `pnpm test` and CI
+- ESLint via `@antfu/eslint-config` (React-aware, preserving the existing
+  quote/semicolon style), wired into `pnpm lint` and CI
+- SSH terminal reconnects keep scrollback history: the xterm instance is
+  now scoped to the server, only the ssh session is re-spawned
 - Project management: rename (slug follows), branch / URL editing and
   deletion (cascades deployments and their logs) from the project page
 - Stored SSH private keys are now actually used: they are materialized to
@@ -49,6 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command errors now surface their real message in the UI (previously every
   toast showed "[object Object]"); messages no longer carry internal
   English prefixes
+- All React lint warnings cleared: the ui package passes `ref` as a plain
+  prop (React 19 style, no forwardRef), relative-time labels use a
+  render-stable timestamp, list keys and ref names normalized
 
 ### Fixed
 

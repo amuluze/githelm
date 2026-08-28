@@ -81,7 +81,7 @@ task release:local                    # local-only build + GH Release upload
 | SSH terminal (PTY + xterm.js) | ✅ |
 | Tauri Rust backend | ✅ commands + keyring + SQLite |
 | Version parity across 5 manifests + CHANGELOG | ✅ |
-| CI quality gate (PR + main) | ✅ macos-15, typecheck, clippy, cross-target |
+| CI quality gate (PR + main) | ✅ macos-15, typecheck, eslint, vitest, clippy, cross-target |
 | Auto-release chain (tag → GH Release) | ✅ macOS arm64 DMG + SHA256SUMS |
 | Local API service / `ghelm` CLI | ⏸ deferred |
 | Tunnels, branch polling, local Docker runtime | ⏸ deferred (see `.omo/plans/githelm.md`) |
