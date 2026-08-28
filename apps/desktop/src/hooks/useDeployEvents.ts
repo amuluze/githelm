@@ -39,6 +39,8 @@ export function useDeployEvents() {
       void queryClient.invalidateQueries({ queryKey: ["deployments"] });
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
       void queryClient.invalidateQueries({ queryKey: ["project"] });
+      // Failures open / successes resolve issues on the Rust side.
+      void queryClient.invalidateQueries({ queryKey: ["issues"] });
       const { status, projectName } = e.payload;
       if (
         (status === "live" || status === "failed" || status === "cancelled")

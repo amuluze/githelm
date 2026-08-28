@@ -25,7 +25,8 @@ use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use crate::storage;
 use crate::types::{
-    Deployment, DeploymentStatus, LogEntry, LogLevel, Project, ProjectStatus, Server, ServerStatus,
+    Deployment, DeploymentStatus, Issue, IssueKind, IssueStatus, LogEntry, LogLevel, Project,
+    ProjectStatus, Server, ServerStatus,
 };
 
 /// Payload of the `deploy-status` event — one per pipeline transition.
@@ -353,6 +354,7 @@ async fn run_pipeline(
                 }
             }
             emitter.emit_status(&dep, &project_name);
+            resolve_deployment_issue(&db, &project_name);
             log_line(
                 &emitter,
                 &db,
@@ -502,6 +504,67 @@ async fn finish_terminal(
         }
     }
     emitter.emit_status(dep, project_name);
+    // A fault the user did not cause: surface it on the Issues page. One
+    // open issue per project — repeated failures refresh nothing until the
+    // next success resolves it.
+    if !cancelled {
+        record_deployment_issue(db, dep, project_name, &message);
+    }
+}
+
+/// Opens a deployment issue for the project unless one is already open.
+fn record_deployment_issue(
+    db: &Arc<Mutex<rusqlite::Connection>>,
+    dep: &Deployment,
+    project_name: &str,
+    error: &str,
+) {
+    let conn = db.lock().expect("db mutex");
+    match storage::find_open_issue(&conn, &IssueKind::Deployment, project_name) {
+        Ok(Some(_)) => return,
+        Ok(None) => {}
+        Err(err) => {
+            eprintln!("[githelm] find open issue: {err}");
+            return;
+        }
+    }
+    let issue = Issue {
+        id: format!(
+            "iss_{}",
+            Uuid::new_v4()
+                .simple()
+                .to_string()
+                .chars()
+                .take(12)
+                .collect::<String>()
+        ),
+        kind: IssueKind::Deployment,
+        status: IssueStatus::Open,
+        title: format!("部署失败：{}", dep.commit_message),
+        description: error.to_string(),
+        target_name: project_name.to_string(),
+        detected_at: chrono::Utc::now().to_rfc3339(),
+        resolved_at: None,
+    };
+    if let Err(err) = storage::insert_issue(&conn, &issue) {
+        eprintln!("[githelm] insert issue: {err}");
+    }
+}
+
+/// A successful deploy resolves any open deployment issue for the project.
+fn resolve_deployment_issue(db: &Arc<Mutex<rusqlite::Connection>>, project_name: &str) {
+    let conn = db.lock().expect("db mutex");
+    match storage::find_open_issue(&conn, &IssueKind::Deployment, project_name) {
+        Ok(Some(issue)) => {
+            if let Err(err) =
+                storage::resolve_issue(&conn, &issue.id, &chrono::Utc::now().to_rfc3339())
+            {
+                eprintln!("[githelm] resolve issue: {err}");
+            }
+        }
+        Ok(None) => {}
+        Err(err) => eprintln!("[githelm] find open issue: {err}"),
+    }
 }
 
 /// System ssh with non-interactive auth (agent / default keys / ssh_config).
@@ -668,6 +731,14 @@ mod tests {
             assert!(text.iter().any(|m| m.contains("build-line-1")));
             assert!(text.iter().any(|m| m.contains("build-line-2")));
             assert!(text.iter().any(|m| m.contains("部署失败")));
+
+            // The failure opened exactly one deployment issue for the project.
+            let issues = s::list_issues(&conn).unwrap();
+            assert_eq!(issues.len(), 1);
+            assert_eq!(issues[0].kind, crate::types::IssueKind::Deployment);
+            assert_eq!(issues[0].status, crate::types::IssueStatus::Open);
+            assert_eq!(issues[0].target_name, "T");
+            assert!(issues[0].title.contains("部署失败"));
         }
     }
 
@@ -769,6 +840,9 @@ mod tests {
             let text: Vec<&str> = logs.iter().map(|l| l.message.as_str()).collect();
             assert!(text.iter().any(|m| m.contains("cancel-me-started")));
             assert!(text.iter().any(|m| m.contains("部署已取消")));
+
+            // A user-initiated cancel is not a fault: no issue is opened.
+            assert!(s::list_issues(&conn).unwrap().is_empty());
         }
     }
 

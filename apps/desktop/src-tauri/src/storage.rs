@@ -672,7 +672,8 @@ pub fn list_issues(conn: &Connection) -> AppResult<Vec<Issue>> {
     Ok(rows)
 }
 
-#[allow(dead_code)]
+/// Written by the deploy pipeline: a failure opens one, the next success
+/// resolves it.
 pub fn insert_issue(conn: &Connection, i: &Issue) -> AppResult<()> {
     conn.execute(
         "INSERT INTO issues (id, kind, status, title, description, target_name, detected_at, resolved_at)
@@ -690,6 +691,33 @@ pub fn insert_issue(conn: &Connection, i: &Issue) -> AppResult<()> {
     )
     .map(|_| ())
     .map_err(sql_err("insert issue"))
+}
+
+/// Finds the still-open issue of `kind` attached to `target_name` — the
+/// dedupe anchor for automatic issue creation (one open issue per target).
+pub fn find_open_issue(
+    conn: &Connection,
+    kind: &IssueKind,
+    target_name: &str,
+) -> AppResult<Option<Issue>> {
+    conn.query_row(
+        "SELECT id, kind, status, title, description, target_name, detected_at, resolved_at
+         FROM issues
+         WHERE kind = ?1 AND target_name = ?2 AND status = 'open'",
+        params![enum_to_str(kind)?, target_name],
+        row_issue,
+    )
+    .optional()
+    .map_err(sql_err("find open issue"))
+}
+
+pub fn resolve_issue(conn: &Connection, id: &str, resolved_at: &str) -> AppResult<()> {
+    conn.execute(
+        "UPDATE issues SET status = 'resolved', resolved_at = ?2 WHERE id = ?1",
+        params![id, resolved_at],
+    )
+    .map(|_| ())
+    .map_err(sql_err("resolve issue"))
 }
 
 fn row_issue(row: &rusqlite::Row<'_>) -> rusqlite::Result<Issue> {
@@ -1033,5 +1061,38 @@ mod tests {
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].kind, IssueKind::Certificate);
         assert!(all[0].resolved_at.is_some());
+    }
+
+    #[test]
+    fn deployment_issue_lifecycle() {
+        let conn = test_conn();
+        assert!(find_open_issue(&conn, &IssueKind::Deployment, "Atlas")
+            .unwrap()
+            .is_none());
+
+        let open = Issue {
+            id: "iss_open".into(),
+            kind: IssueKind::Deployment,
+            status: IssueStatus::Open,
+            title: "部署失败：feat: x".into(),
+            description: "命令退出码 1".into(),
+            target_name: "Atlas".into(),
+            detected_at: "2026-08-19T04:00:00Z".into(),
+            resolved_at: None,
+        };
+        insert_issue(&conn, &open).unwrap();
+        let found = find_open_issue(&conn, &IssueKind::Deployment, "Atlas")
+            .unwrap()
+            .expect("open issue should be found");
+        assert_eq!(found.id, "iss_open");
+
+        // A resolved or other-target issue does not count as open.
+        resolve_issue(&conn, "iss_open", "2026-08-19T05:00:00Z").unwrap();
+        assert!(find_open_issue(&conn, &IssueKind::Deployment, "Atlas")
+            .unwrap()
+            .is_none());
+        let stored = list_issues(&conn).unwrap().remove(0);
+        assert_eq!(stored.status, IssueStatus::Resolved);
+        assert_eq!(stored.resolved_at.as_deref(), Some("2026-08-19T05:00:00Z"));
     }
 }

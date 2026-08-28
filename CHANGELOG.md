@@ -45,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now scoped to the server, only the ssh session is re-spawned
 - Project management: rename (slug follows), branch / URL editing and
   deletion (cascades deployments and their logs) from the project page
+- Issues page now shows real data: a failed deployment opens one issue per
+  project (never duplicated while unresolved, user cancellations excluded)
+  and the next successful deploy resolves it; the page refreshes live via
+  deploy-status events
 - Stored SSH private keys are now actually used: they are materialized to
   `~/.githelm/keys/<id>.key` (0600) and offered via `-i` to deploy, connection
   test and terminal; server credentials are optional (blank = host ssh config)
