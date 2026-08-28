@@ -6,6 +6,7 @@ import {
   sendNotification,
 } from "@tauri-apps/plugin-notification";
 import { useEffect } from "react";
+import { useSettingsStore } from "../stores/settings";
 
 /** Payload of the Rust-side `deploy-status` event. */
 export interface DeployStatusEvent {
@@ -49,12 +50,10 @@ export function useDeployEvents() {
         void queryClient.invalidateQueries({ queryKey: ["issues"] });
       }
       const { status, projectName } = e.payload;
-      if (
-        (status === "live" || status === "failed" || status === "cancelled")
-        && document.hidden
-      ) {
+      const isTerminal
+        = status === "live" || status === "failed" || status === "cancelled";
+      if (isTerminal && shouldNotify())
         void notifyDeploy(status, projectName);
-      }
     });
     // The background checker emits this when a scan opened or resolved an
     // issue, so the issues page and badges stay live without polling.
@@ -68,6 +67,18 @@ export function useDeployEvents() {
       void unIssues.then(off => off());
     };
   }, [queryClient]);
+}
+
+/**
+ * Applies the 通知 policy from settings: "all" notifies regardless of
+ * visibility, "background" only while the window is hidden (the user is
+ * likely watching when visible), "off" never.
+ */
+function shouldNotify(): boolean {
+  const policy = useSettingsStore.getState().notifyPolicy;
+  if (policy === "off")
+    return false;
+  return policy === "all" || document.hidden;
 }
 
 async function notifyDeploy(status: DeployStatusEvent["status"], projectName: string) {

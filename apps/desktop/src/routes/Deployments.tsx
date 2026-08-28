@@ -86,7 +86,7 @@ export function DeploymentsPage() {
       <div className="px-8 pt-8">
         <PageHeader
           title="部署"
-          description={`${projectCount} 个项目共 ${all.length} 次`}
+          description={`${projectCount} 个已部署项目 · 共 ${all.length} 次部署`}
           actions={(
             <button
               type="button"
@@ -173,9 +173,19 @@ export function DeploymentsPage() {
                     </div>
                   )
                 : visible.length === 0
-                  ? (
-                      <DeploymentsEmpty onDeploy={() => setPicking(true)} />
-                    )
+                  ? all.length === 0
+                    ? (
+                        <DeploymentsEmpty onDeploy={() => setPicking(true)} />
+                      )
+                    : (
+                        <FilteredEmpty
+                          onClear={() => {
+                            setSearch("");
+                            setProject("all");
+                            setTab("all");
+                          }}
+                        />
+                      )
                   : (
                       visible.map(d => (
                         <DeploymentRow
@@ -385,6 +395,7 @@ function StatRow({
 }
 
 function DeploymentsEmpty({ onDeploy }: { onDeploy: () => void }) {
+  const navigate = useNavigate();
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3.5 p-6">
       <WindowIllustration />
@@ -401,10 +412,27 @@ function DeploymentsEmpty({ onDeploy }: { onDeploy: () => void }) {
           <Rocket className="h-3.5 w-3.5" />
           部署项目
         </button>
-        <button type="button" className="th-btn th-btn-soft px-[18px] py-2.5">
+        <button
+          type="button"
+          onClick={() => navigate("/library")}
+          className="th-btn th-btn-soft px-[18px] py-2.5"
+        >
           浏览模板
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Filters/search produced zero rows while deployments exist. */
+function FilteredEmpty({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6">
+      <Search className="h-8 w-8 th-text-hint" />
+      <p className="text-sm th-text-muted">没有符合当前筛选条件的部署。</p>
+      <button type="button" onClick={onClear} className="th-btn th-btn-soft px-3.5">
+        清除筛选
+      </button>
     </div>
   );
 }

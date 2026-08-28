@@ -1,7 +1,8 @@
+import type { LogEntry } from "@githelm/core";
 import { Card } from "@githelm/ui";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pause, Play, Trash2 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "../components/domain/PageHeader";
 import { api } from "../lib/api";
 
@@ -16,7 +17,35 @@ const LEVEL_COLOR: Record<Level, string> = {
 
 const LEVELS: Level[] = ["debug", "info", "warn", "error"];
 
+/** View cap for the accumulated stream — the DB prunes itself at 5k. */
+const MAX_VIEW_ENTRIES = 2000;
+
+/** The poll window should outlast a burst between two 2s ticks. */
+const FETCH_LIMIT = 200;
+
+/** Stable empty reference for freshly cleared / loading streams. */
+const EMPTY_STREAM: LogEntry[] = [];
+
+/**
+ * Live tail: each poll appends only the lines not already in the cache, so
+ * the stream accumulates across fetches (newest at the bottom) and survives
+ * inside the query cache — no component-state syncing needed. 清空 writes an
+ * empty cache under the same key: the view clears instantly and the stream
+ * picks up from whatever comes next, while the audit rows in the DB stay.
+ */
+function mergeStream(prev: LogEntry[], fresh: LogEntry[]): LogEntry[] {
+  const seen = new Set(prev.map(e => e.id));
+  const additions = fresh.filter(e => !seen.has(e.id));
+  if (additions.length === 0)
+    return prev;
+  const merged = [...prev, ...additions];
+  return merged.length > MAX_VIEW_ENTRIES
+    ? merged.slice(merged.length - MAX_VIEW_ENTRIES)
+    : merged;
+}
+
 export function LogsPage() {
+  const queryClient = useQueryClient();
   const servers = useQuery({
     queryKey: ["servers"],
     queryFn: api.listServers,
@@ -27,28 +56,31 @@ export function LogsPage() {
     () => new Set(LEVELS),
   );
 
-  const initial = useQuery({
-    queryKey: ["logs", activeTarget],
-    queryFn: () => api.listLogs(activeTarget ?? undefined, 50),
+  const logsKey = ["logs", activeTarget] as const;
+  const logsQuery = useQuery({
+    queryKey: logsKey,
+    queryFn: async () => {
+      const fresh = await api.listLogs(activeTarget ?? undefined, FETCH_LIMIT);
+      return mergeStream(queryClient.getQueryData<LogEntry[]>(logsKey) ?? [], fresh);
+    },
     refetchInterval: paused ? false : 2000,
   });
+  const entries = logsQuery.data ?? EMPTY_STREAM;
 
-  const seenRef = useRef<Set<string>>(new Set());
-  const allLogs = useMemo(() => initial.data ?? [], [initial.data]);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  /** Stick to the tail unless the user scrolled up to read. */
+  const pinnedRef = useRef(true);
 
-  // Dedupe by id (refetch returns new data every 2s; we want a rolling window).
-  const deduped = useMemo(() => {
-    const out: typeof allLogs = [];
-    for (const entry of allLogs) {
-      if (!seenRef.current.has(entry.id)) {
-        seenRef.current.add(entry.id);
-        out.push(entry);
-      }
-    }
-    return out;
-  }, [allLogs]);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (el && pinnedRef.current)
+      el.scrollTop = el.scrollHeight;
+  }, [entries]);
 
-  const visible = deduped.filter(l => levels.has(l.level));
+  const visible = useMemo(
+    () => entries.filter(l => levels.has(l.level)),
+    [entries, levels],
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -69,7 +101,7 @@ export function LogsPage() {
               <button
                 type="button"
                 className="th-btn th-btn-secondary px-3.5"
-                onClick={() => seenRef.current.clear()}
+                onClick={() => queryClient.setQueryData(logsKey, [])}
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 清空
@@ -132,7 +164,16 @@ export function LogsPage() {
         </aside>
 
         <Card className="min-w-0 flex-1 overflow-hidden p-0">
-          <div className="h-full overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
+          <div
+            ref={scrollerRef}
+            onScroll={() => {
+              const el = scrollerRef.current;
+              if (!el)
+                return;
+              pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+            }}
+            className="h-full overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed"
+          >
             {visible.map(entry => (
               <div key={entry.id} className="flex gap-2 py-0.5">
                 <span className="shrink-0 th-text-subtle">

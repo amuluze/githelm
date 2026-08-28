@@ -42,6 +42,11 @@ export function DeploymentLogsDialog({
   const logs = useQuery({
     queryKey: ["logs", deploymentId],
     queryFn: () => api.listLogs(deploymentId, 500),
+    // Lines streamed live live only in component state and are lost on
+    // unmount — remounting must always re-read the authoritative DB tail,
+    // or a quick close/reopen shows a truncated log (the 30s staleTime
+    // would otherwise serve the stale seed).
+    refetchOnMount: "always",
   });
 
   // Listeners bind per deployment; live state starts empty on (re)mount.

@@ -23,21 +23,23 @@ const KIND_ICON: Record<ServerKind, React.ComponentType<{ className?: string }>>
   cloud: Cloud,
 };
 
-const STATUS_VARIANT: Record<
-  ServerStatus,
-  "success" | "muted" | "warning" | "danger"
-> = {
+/**
+ * The list deliberately shows a binary status: 在线 or 离线. The backend
+ * keeps finer states (connecting = not yet probed, error = probe failed)
+ * but they all mean "not online" to the user.
+ */
+const STATUS_VARIANT: Record<ServerStatus, "success" | "muted"> = {
   online: "success",
   offline: "muted",
-  connecting: "warning",
-  error: "danger",
+  connecting: "muted",
+  error: "muted",
 };
 
 const STATUS_LABEL: Record<ServerStatus, string> = {
   online: "在线",
   offline: "离线",
-  connecting: "连接中",
-  error: "错误",
+  connecting: "离线",
+  error: "离线",
 };
 
 export interface ServerRowProps {

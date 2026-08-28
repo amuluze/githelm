@@ -380,6 +380,11 @@ fn row_project(row: &rusqlite::Row<'_>) -> rusqlite::Result<Project> {
 
 // ── Deployments ─────────────────────────────────────────────────────────
 
+/// Newest deployments returned by list queries. The deployments table has
+/// no pruning (logs do), so without a cap the lists and every refetch would
+/// grow with the install's age; 500 is far beyond what any panel renders.
+const DEPLOYMENT_LIST_LIMIT: i64 = 500;
+
 pub fn list_deployments(conn: &Connection, project_id: Option<&str>) -> AppResult<Vec<Deployment>> {
     let mut stmt = conn
         .prepare(
@@ -387,11 +392,12 @@ pub fn list_deployments(conn: &Connection, project_id: Option<&str>) -> AppResul
                     started_at, finished_at, duration_ms
              FROM deployments
              WHERE (?1 IS NULL OR project_id = ?1)
-             ORDER BY started_at DESC, rowid DESC",
+             ORDER BY started_at DESC, rowid DESC
+             LIMIT ?2",
         )
         .map_err(sql_err("list deployments"))?;
     let rows = stmt
-        .query_map(params![project_id], row_deployment)
+        .query_map(params![project_id, DEPLOYMENT_LIST_LIMIT], row_deployment)
         .map_err(sql_err("list deployments"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(sql_err("list deployments"))?;

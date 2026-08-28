@@ -175,6 +175,7 @@ pub fn run() {
             commands::secrets::delete_secret,
             commands::secrets::has_secret,
             commands::app::get_app_version,
+            commands::app::get_data_dir,
             commands::updater::check_for_update,
             commands::updater::install_update,
             commands::updater::restart_app,

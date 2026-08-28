@@ -84,6 +84,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The settings page's 常规 / Git / 通知 / Email / 实例 tabs are now real,
+  switchable panels — previously the side nav was decorative (only the
+  instance panel existed): 常规 gains a theme picker wired to the app theme;
+  Git shows the GitHub connection (login + keychain/gh-cli source) with an
+  unlink action; 通知 adds a deploy-notification policy (总是 / 仅后台 /
+  关闭) that the deploy event listener now respects; Email gets an honest
+  "即将推出" placeholder; the instance panel drops its mock values
+  (Docker 27.3, 2.4 GB, 运行正常) in favor of the real data directory via a
+  new `get_data_dir` command plus the Tauri runtime version
+- Server list status is now strictly binary — 在线 (green) or 离线 (gray).
+  The backend keeps its finer states (connecting = not yet probed, error =
+  last probe failed) but they all render as 离线; failure details remain on
+  the per-row test button's toast
 - The issues page: status-aware badges and icon colors (未解决 danger /
   已解决 success — previously every row showed 已解决), per-tab counts,
   click-to-expand long descriptions, and a proper error state with retry
@@ -102,6 +115,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Reopening a deployment's log dialog within 30s showed the stale seed and
+  hid every line streamed in between (including the final success/failure
+  line) — the log query now always refetches on mount
+- The deployments page now distinguishes "no deployments yet" from "no
+  matches for the current filter/search" (the latter shows a 清除筛选
+  action instead of the first-deploy empty state), the 浏览模板 button
+  navigates to the library, and the project page's 部署 button is disabled
+  while a deploy runs (matching edit/delete)
+- `list_deployments` caps at the newest 500 rows; the deployments table has
+  no pruning, so lists and refetches previously grew with the install age
+- The audit-log page's 清空 button was a silent no-op: it cleared the
+  dedupe-id set (which only made the next poll re-admit all recent lines)
+  and never touched the visible list. The live tail now genuinely
+  accumulates across polls inside the query cache, 清空 clears the view
+  instantly (audit rows in the DB are untouched), switching sources starts
+  a fresh stream, the view follows the tail unless scrolled up, and the
+  fetch window grew from 50 to 200 lines so bursts between 2s polls are
+  not dropped
 - The deployments page "已取消" filter tab now matches the real `cancelled`
   status instead of `rolled-back`
 - SSH private keys pasted into the server form no longer lose their

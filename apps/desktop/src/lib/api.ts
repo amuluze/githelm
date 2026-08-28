@@ -250,6 +250,8 @@ export const api = {
 
   // ── App metadata ────────────────────────────────────────────────────
   getAppVersion: () => call<{ version: string; tauri: string }>("get_app_version"),
+  /** Absolute path of the local data directory (~/.githelm). */
+  getDataDir: () => call<string>("get_data_dir"),
 
   // ── App updates ────────────────────────────────────────────────────
   checkForUpdate: () => call<UpdateStatus>("check_for_update"),

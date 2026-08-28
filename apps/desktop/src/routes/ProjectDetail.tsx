@@ -153,6 +153,8 @@ export function ProjectDetailPage() {
               <button
                 type="button"
                 className="th-btn th-btn-primary"
+                disabled={p.status === "building"}
+                title={p.status === "building" ? "部署进行中，请等待完成或先取消" : undefined}
                 onClick={() => setDeployOpen(true)}
               >
                 <Rocket className="h-3.5 w-3.5" />
