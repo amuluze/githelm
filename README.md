@@ -4,8 +4,14 @@ A Tauri 2 + React 19 desktop client for self-hosted application deployment.
 
 This project is a focused, lightweight refactor of [openship](https://github.com/oblien/openship)'s
 desktop experience. The full openship control plane (API, dashboard, edge, email, CLI) is
-deliberately out of scope for this iteration — githelm currently renders the desktop shell
-with mock data and a minimal Rust backend.
+deliberately out of scope for this iteration — githelm is a desktop-only client whose Rust
+backend persists everything in SQLite and runs a real deploy pipeline:
+
+1. configure a project (local path, target server, deploy dir, build & update commands)
+2. `deploy` runs the build command locally (e.g. `task push`), then SSHes to the server and
+   runs the update command in the deploy dir (e.g. `docker compose pull && up -d`),
+   streaming every output line into the log viewer — cancellable at any point
+3. servers come with an interactive SSH terminal (PTY-backed xterm.js)
 
 ## Repository layout
 
@@ -68,13 +74,19 @@ task release:local                    # local-only build + GH Release upload
 |---|---|
 | Layout (Sidebar / TopBar / StatusBar) | ✅ |
 | Theme system (light / dark) | ✅ |
-| Overview / Projects / Deployments / Servers / Logs / Settings | ✅ mock data |
-| Tauri Rust backend | ✅ commands + keyring + store |
+| Overview / Projects / Deployments / Servers / Logs / Settings | ✅ real data |
+| Project create + GitHub import (keychain PAT / `gh` CLI) | ✅ |
+| SQLite persistence (`~/.githelm/githelm.db`, migrations) | ✅ |
+| Deploy pipeline (local build & push → SSH update, live logs, cancel) | ✅ |
+| SSH terminal (PTY + xterm.js) | ✅ |
+| Tauri Rust backend | ✅ commands + keyring + SQLite |
 | Version parity across 5 manifests + CHANGELOG | ✅ |
 | CI quality gate (PR + main) | ✅ macos-15, typecheck, clippy, cross-target |
 | Auto-release chain (tag → GH Release) | ✅ macOS arm64 DMG + SHA256SUMS |
-| Local API service | ⏸ deferred |
+| Local API service / `ghelm` CLI | ⏸ deferred |
+| Tunnels, branch polling, local Docker runtime | ⏸ deferred (see `.omo/plans/githelm.md`) |
 | Code signing / notarization | ⏸ deferred (adhoc-signed builds) |
+| Auto-update endpoint configuration | ⏸ deferred (updater wired, no endpoint yet) |
 
 ## Design language
 

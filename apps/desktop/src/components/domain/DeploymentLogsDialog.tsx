@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Terminal, X } from "lucide-react";
+import { toast } from "sonner";
 import type { Deployment } from "@githelm/core";
 import { formatDuration } from "@githelm/core";
-import { api } from "../../lib/api";
+import { api, ApiError } from "../../lib/api";
 
 const STATUS_LABEL: Record<Deployment["status"], string> = {
   queued: "排队中",
@@ -11,7 +12,18 @@ const STATUS_LABEL: Record<Deployment["status"], string> = {
   deploying: "部署中",
   live: "已上线",
   failed: "失败",
+  cancelled: "已取消",
   "rolled-back": "已回滚",
+};
+
+const STATUS_COLOR: Record<Deployment["status"], string> = {
+  queued: "th-text-muted",
+  building: "text-[var(--th-warning-fg)]",
+  deploying: "text-[var(--th-warning-fg)]",
+  live: "text-[var(--th-success-fg)]",
+  failed: "text-[var(--th-danger-fg)]",
+  cancelled: "th-text-muted",
+  "rolled-back": "th-text-muted",
 };
 
 export interface DeploymentLogsDialogProps {
@@ -25,6 +37,7 @@ export const DeploymentLogsDialog = ({
   onClose,
 }: DeploymentLogsDialogProps) => {
   const scroller = useRef<HTMLDivElement>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const deployment = useQuery({
     queryKey: ["deployment", deploymentId],
@@ -71,19 +84,38 @@ export const DeploymentLogsDialog = ({
           </div>
           <div className="flex items-center gap-3">
             {dep && (
-              <span
-                className={
-                  dep.status === "live"
-                    ? "text-xs text-[var(--th-success-fg)]"
-                    : dep.status === "failed"
-                      ? "text-xs text-[var(--th-danger-fg)]"
-                      : "text-xs text-[var(--th-warning-fg)]"
-                }
-              >
+              <span className={`text-xs ${STATUS_COLOR[dep.status]}`}>
                 {running && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
                 {STATUS_LABEL[dep.status]}
                 {dep.durationMs ? ` · ${formatDuration(dep.durationMs)}` : ""}
               </span>
+            )}
+            {running && (
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={async () => {
+                  setCancelling(true);
+                  try {
+                    await api.cancelDeployment(deploymentId);
+                    toast.success("正在取消部署…");
+                    void deployment.refetch();
+                  } catch (err) {
+                    toast.error(
+                      err instanceof ApiError ? err.message : "取消部署失败",
+                    );
+                    setCancelling(false);
+                  }
+                }}
+                className="th-btn th-btn-secondary px-2.5 py-1 text-xs"
+              >
+                {cancelling ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <X className="mr-1 h-3 w-3" />
+                )}
+                取消部署
+              </button>
             )}
             <button
               type="button"

@@ -30,7 +30,8 @@ const TABS: Array<{ key: StatusTab; label: string }> = [
   { key: "live", label: "成功" },
   { key: "failed", label: "失败" },
   { key: "building", label: "构建中" },
-  { key: "rolled-back", label: "已取消" },
+  { key: "cancelled", label: "已取消" },
+  { key: "rolled-back", label: "已回滚" },
 ];
 
 export const DeploymentsPage = () => {

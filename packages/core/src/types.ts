@@ -9,6 +9,7 @@ export type DeploymentStatus =
   | "deploying"
   | "live"
   | "failed"
+  | "cancelled"
   | "rolled-back";
 export type ServerKind = "ssh" | "cloud";
 export type ServerStatus = "online" | "offline" | "connecting" | "error";

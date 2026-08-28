@@ -124,6 +124,10 @@ export const api = {
    *  building record; progress lands in the logs under the deployment id. */
   deployProject: (projectId: string) =>
     call<Deployment>("deploy_project", { projectId }),
+  /** Stops a running pipeline: kills the current command and records the
+   *  deployment as cancelled. Errors when it is no longer running. */
+  cancelDeployment: (deploymentId: string) =>
+    call<void>("cancel_deployment", { deploymentId }),
 
   // ── Servers ──────────────────────────────────────────────────────────
   listServers: () => call<Server[]>("list_servers"),

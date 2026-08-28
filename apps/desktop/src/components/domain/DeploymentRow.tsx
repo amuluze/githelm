@@ -9,6 +9,7 @@ const STATUS_LABEL: Record<DeploymentStatus, string> = {
   deploying: "部署中",
   live: "已上线",
   failed: "失败",
+  cancelled: "已取消",
   "rolled-back": "已回滚",
 };
 
@@ -21,6 +22,7 @@ const STATUS_VARIANT: Record<
   deploying: "info",
   live: "success",
   failed: "danger",
+  cancelled: "muted",
   "rolled-back": "muted",
 };
 

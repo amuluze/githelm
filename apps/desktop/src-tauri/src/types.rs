@@ -68,6 +68,7 @@ pub enum DeploymentStatus {
     Deploying,
     Live,
     Failed,
+    Cancelled,
     RolledBack,
 }
 

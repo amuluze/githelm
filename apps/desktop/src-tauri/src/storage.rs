@@ -41,7 +41,11 @@ pub fn open() -> AppResult<Connection> {
         std::fs::create_dir_all(parent)
             .map_err(|e| AppError::Internal(format!("create {}: {e}", parent.display())))?;
     }
-    open_at(&path)
+    let conn = open_at(&path)?;
+    // The pipeline writes one log row per output line; prune once per launch
+    // so the table stays bounded without paying for a check on every insert.
+    prune_logs(&conn, LOG_RETENTION_ROWS)?;
+    Ok(conn)
 }
 
 pub fn open_at(path: &Path) -> AppResult<Connection> {
@@ -597,6 +601,26 @@ fn row_log(row: &rusqlite::Row<'_>) -> rusqlite::Result<LogEntry> {
     })
 }
 
+/// Upper bound on rows kept in the logs table. Deployment output is written
+/// line-by-line and mostly noise after a deploy ends; 5k lines is far more
+/// than any single log dialog renders (the UI fetches 500).
+pub const LOG_RETENTION_ROWS: i64 = 5_000;
+
+/// Deletes every log entry except the newest `keep` ones. Called at startup
+/// and after each deployment reaches a terminal state. Returns the number of
+/// rows removed.
+pub fn prune_logs(conn: &Connection, keep: i64) -> AppResult<u64> {
+    let deleted = conn
+        .execute(
+            "DELETE FROM logs WHERE rowid NOT IN (
+                 SELECT rowid FROM logs ORDER BY timestamp DESC, rowid DESC LIMIT ?1
+             )",
+            params![keep],
+        )
+        .map_err(sql_err("prune logs"))?;
+    Ok(deleted as u64)
+}
+
 // ── Issues ──────────────────────────────────────────────────────────────
 
 pub fn list_issues(conn: &Connection) -> AppResult<Vec<Issue>> {
@@ -852,6 +876,38 @@ mod tests {
         assert!(list_logs(&conn, Some("srv_other"), 10).unwrap().is_empty());
         let all = list_logs(&conn, None, 100).unwrap();
         assert_eq!(all.len(), 5);
+    }
+
+    #[test]
+    fn prune_logs_keeps_newest() {
+        let conn = test_conn();
+        for i in 0..6 {
+            insert_log(
+                &conn,
+                &LogEntry {
+                    id: format!("log_{i}"),
+                    target_id: "dep_1".into(),
+                    level: LogLevel::Info,
+                    message: format!("entry {i}"),
+                    timestamp: format!("2026-08-19T04:00:{i:02}Z"),
+                },
+            )
+            .unwrap();
+        }
+        // Under the cap: nothing is removed.
+        assert_eq!(prune_logs(&conn, 10).unwrap(), 0);
+        // Over the cap: the 3 oldest go, the newest 2 survive in order.
+        assert_eq!(prune_logs(&conn, 2).unwrap(), 4);
+        assert_eq!(
+            list_logs(&conn, None, 100)
+                .unwrap()
+                .iter()
+                .map(|l| l.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["log_4", "log_5"]
+        );
+        // Repeated prunes are idempotent.
+        assert_eq!(prune_logs(&conn, 2).unwrap(), 0);
     }
 
     #[test]

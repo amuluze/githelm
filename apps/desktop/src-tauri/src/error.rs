@@ -7,6 +7,11 @@ pub enum AppError {
     NotFound(String),
     #[error("validation failed: {0}")]
     Validation(String),
+    /// A running deploy pipeline was stopped by the user; never surfaced to
+    /// the renderer as an error — the pipeline turns it into a log line and
+    /// a `cancelled` deployment status.
+    #[error("cancelled")]
+    Cancelled,
     #[error("internal error: {0}")]
     Internal(String),
 }
@@ -30,6 +35,7 @@ impl serde::Serialize for AppError {
             code: match self {
                 AppError::NotFound(_) => "NOT_FOUND",
                 AppError::Validation(_) => "VALIDATION",
+                AppError::Cancelled => "CANCELLED",
                 AppError::Internal(_) => "INTERNAL",
             },
         };
