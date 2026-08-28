@@ -43,6 +43,12 @@ jobs:
       - name: Run npm run check (typecheck + cargo check)
         run: pnpm check
 
+      - name: Run workspace tests (vitest)
+        run: pnpm test
+
+      - name: Run ESLint
+        run: pnpm lint
+
       - name: Run cargo clippy (-D warnings)
         run: pnpm lint:rust
 
