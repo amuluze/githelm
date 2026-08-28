@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 # Githelm 任务入口（taskfile.dev）。
 #
@@ -87,16 +87,16 @@ tasks:
       校验版本一致性与 CHANGELOG 条目后打 tag 并推送，触发 CI 自动发布。
       用法：task release:tag -- 0.1.1
     vars:
-      VERSION: '{{.CLI_ARGS}}'
+      VERSION: "{{.CLI_ARGS}}"
     preconditions:
       - sh: 'test -n "{{.VERSION}}"'
-        msg: '缺少版本号。用法：task release:tag -- 0.1.1'
-      - sh: 'node scripts/bump-version.mjs --check'
-        msg: '版本号 5 处不一致，先运行 task bump:version -- {{.VERSION}}'
+        msg: "缺少版本号。用法：task release:tag -- 0.1.1"
+      - sh: node scripts/bump-version.mjs --check
+        msg: "版本号 5 处不一致，先运行 task bump:version -- {{.VERSION}}"
     cmds:
       - task: release:notes
         vars:
-          CLI_ARGS: 'validate --tag v{{.VERSION}}'
+          CLI_ARGS: "validate --tag v{{.VERSION}}"
       - cmd: git tag "v{{.VERSION}}" && git push origin "v{{.VERSION}}"
         desc: 打 tag 并推送，触发 release-trigger.yml
 
@@ -112,9 +112,9 @@ tasks:
       DMG_DIR: apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg
     preconditions:
       - sh: 'git rev-parse -q --verify "refs/tags/v{{.VERSION}}"'
-        msg: 'tag v{{.VERSION}} 不存在：先提交版本变更并 task release:tag -- {{.VERSION}}'
+        msg: "tag v{{.VERSION}} 不存在：先提交版本变更并 task release:tag -- {{.VERSION}}"
       - sh: gh auth status
-        msg: 'gh 未认证或无仓库写权限'
+        msg: gh 未认证或无仓库写权限
     cmds:
       - task: build:dmg
       - cmd: cd '{{.DMG_DIR}}' && shasum -a 256 "Githelm_{{.VERSION}}_aarch64.dmg" > SHA256SUMS.txt

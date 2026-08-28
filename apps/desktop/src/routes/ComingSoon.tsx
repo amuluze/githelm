@@ -1,5 +1,5 @@
-import { useLocation } from "react-router-dom";
 import { Card } from "@githelm/ui";
+import { useLocation } from "react-router-dom";
 import { PageHeader } from "../components/domain/PageHeader";
 
 /**
@@ -26,7 +26,7 @@ const COPY: Record<string, { title: string; desc: string; hint: string }> = {
   },
 };
 
-export const ComingSoonPage = () => {
+export function ComingSoonPage() {
   const { pathname } = useLocation();
   const copy = COPY[pathname] ?? {
     title: "敬请期待",
@@ -50,4 +50,4 @@ export const ComingSoonPage = () => {
       </div>
     </div>
   );
-};
+}

@@ -6,8 +6,9 @@
 
 export type ResolvedTheme = "light" | "dark";
 
-export const applyThemeToDocument = (theme: ResolvedTheme) => {
-  if (typeof document === "undefined") return;
+export function applyThemeToDocument(theme: ResolvedTheme) {
+  if (typeof document === "undefined")
+    return;
   document.documentElement.setAttribute("data-theme", theme);
   document.documentElement.style.colorScheme = theme;
-};
+}

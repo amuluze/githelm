@@ -1,6 +1,6 @@
-import { useNavigate } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 /**
  * Title bar per githelm.pen (44px, page background). The window controls are
@@ -11,7 +11,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
  * is repeated on the child containers — the buttons themselves stay
  * clickable because the attribute is not on them.
  */
-export const TitleBar = () => {
+export function TitleBar() {
   const navigate = useNavigate();
 
   return (
@@ -43,13 +43,13 @@ export const TitleBar = () => {
       </div>
     </header>
   );
-};
+}
 
-const isTauri =
-  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+const isTauri
+  = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 /** Window controls as traffic lights; glyphs appear on hover (macOS style). */
-const TrafficLights = () => {
+function TrafficLights() {
   if (!isTauri) {
     // Plain browser preview: decorative dots only.
     return (
@@ -84,14 +84,16 @@ const TrafficLights = () => {
       />
     </div>
   );
-};
+}
 
-const Dot = ({ color }: { color: string }) => (
-  <span
-    className="h-3 w-3 rounded-full"
-    style={{ backgroundColor: color }}
-  />
-);
+function Dot({ color }: { color: string }) {
+  return (
+    <span
+      className="h-3 w-3 rounded-full"
+      style={{ backgroundColor: color }}
+    />
+  );
+}
 
 interface LightProps {
   label: string;
@@ -100,36 +102,44 @@ interface LightProps {
   onClick: () => void;
 }
 
-const Light = ({ label, color, glyph, onClick }: LightProps) => (
-  <button
-    type="button"
-    aria-label={label}
-    title={label}
-    onClick={onClick}
-    className="group flex h-3 w-3 items-center justify-center rounded-full"
-    style={{ backgroundColor: color }}
-  >
-    <span className="text-[9px] font-bold leading-none text-black/55 opacity-0 transition-opacity group-hover:opacity-100">
-      {glyph}
-    </span>
-  </button>
-);
+function Light({ label, color, glyph, onClick }: LightProps) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="group flex h-3 w-3 items-center justify-center rounded-full"
+      style={{ backgroundColor: color }}
+    >
+      <span className="text-[9px] font-bold leading-none text-black/55 opacity-0 transition-opacity group-hover:opacity-100">
+        {glyph}
+      </span>
+    </button>
+  );
+}
 
 /* Glyphs sized to fit a 12px dot. */
-const GlyphX = () => (
-  <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden>
-    <path d="M1.5 1.5l5 5M6.5 1.5l-5 5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-  </svg>
-);
+function GlyphX() {
+  return (
+    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden>
+      <path d="M1.5 1.5l5 5M6.5 1.5l-5 5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
 
-const GlyphMinus = () => (
-  <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden>
-    <path d="M1.5 4h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-  </svg>
-);
+function GlyphMinus() {
+  return (
+    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden>
+      <path d="M1.5 4h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
 
-const GlyphPlus = () => (
-  <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden>
-    <path d="M4 1.5v5M1.5 4h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-  </svg>
-);
+function GlyphPlus() {
+  return (
+    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden>
+      <path d="M4 1.5v5M1.5 4h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}

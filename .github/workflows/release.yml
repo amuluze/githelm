@@ -14,7 +14,7 @@ on:
         required: true
         type: string
       platform:
-        description: "Build all primary platforms or repair one platform"
+        description: Build all primary platforms or repair one platform
         required: true
         default: all
         type: choice

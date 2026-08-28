@@ -1,8 +1,8 @@
 {
   "name": "@githelm/desktop",
-  "private": true,
-  "version": "0.1.0",
   "type": "module",
+  "version": "0.1.0",
+  "private": true,
   "description": "Githelm desktop — Tauri 2 + React 19 frontend",
   "scripts": {
     "dev": "vite",

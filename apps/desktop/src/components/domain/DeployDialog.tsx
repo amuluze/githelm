@@ -1,6 +1,5 @@
-import { useState } from "react";
+import type { Deployment, Project } from "@githelm/core";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   ArrowUp,
@@ -12,12 +11,15 @@ import {
   Terminal,
   X,
 } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import type { Deployment, Project } from "@githelm/core";
 import { api, ApiError } from "../../lib/api";
 
-/** Taskfile-style convention (see the amuluze workflow): the local command
- *  builds and pushes the image; the remote command refreshes the service. */
+/**
+ * Taskfile-style convention (see the amuluze workflow): the local command
+ *  builds and pushes the image; the remote command refreshes the service.
+ */
 const DEFAULT_BUILD_COMMAND = "task push";
 const DEFAULT_UPDATE_COMMAND = "docker compose pull && docker compose up -d";
 
@@ -29,13 +31,15 @@ interface DeployConfigForm {
   updateCommand: string;
 }
 
-const configOf = (p: Project): DeployConfigForm => ({
-  localPath: p.localPath ?? "",
-  serverId: p.serverId ?? "",
-  deployDir: p.deployDir ?? "",
-  buildCommand: p.buildCommand ?? DEFAULT_BUILD_COMMAND,
-  updateCommand: p.updateCommand ?? DEFAULT_UPDATE_COMMAND,
-});
+function configOf(p: Project): DeployConfigForm {
+  return {
+    localPath: p.localPath ?? "",
+    serverId: p.serverId ?? "",
+    deployDir: p.deployDir ?? "",
+    buildCommand: p.buildCommand ?? DEFAULT_BUILD_COMMAND,
+    updateCommand: p.updateCommand ?? DEFAULT_UPDATE_COMMAND,
+  };
+}
 
 export interface DeployDialogProps {
   project: Project;
@@ -44,7 +48,7 @@ export interface DeployDialogProps {
 }
 
 /** Configure (or review) a project's deploy pipeline, then start it. */
-export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps) => {
+export function DeployDialog({ project, onClose, onStarted }: DeployDialogProps) {
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.listServers });
   const [form, setForm] = useState<DeployConfigForm>(() => configOf(project));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -55,9 +59,10 @@ export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps)
     try {
       const picked = await open({ directory: true, multiple: false });
       if (typeof picked === "string" && picked) {
-        setForm((f) => ({ ...f, localPath: picked }));
+        setForm(f => ({ ...f, localPath: picked }));
       }
-    } catch {
+    }
+    catch {
       // A failed native dialog is not actionable — keep manual input.
     }
   };
@@ -78,20 +83,26 @@ export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps)
       toast.success("部署已启动");
       onStarted(dep);
     },
-    onError: (err) =>
+    onError: err =>
       toast.error(err instanceof ApiError ? err.message : "启动部署失败"),
   });
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const fieldErrors: Record<string, string> = {};
-    if (!form.localPath.trim()) fieldErrors.localPath = "本地路径不能为空";
-    if (!form.serverId) fieldErrors.serverId = "请选择目标服务器";
-    if (!form.deployDir.trim()) fieldErrors.deployDir = "部署目录不能为空";
-    if (!form.buildCommand.trim()) fieldErrors.buildCommand = "构建命令不能为空";
-    if (!form.updateCommand.trim()) fieldErrors.updateCommand = "更新命令不能为空";
+    if (!form.localPath.trim())
+      fieldErrors.localPath = "本地路径不能为空";
+    if (!form.serverId)
+      fieldErrors.serverId = "请选择目标服务器";
+    if (!form.deployDir.trim())
+      fieldErrors.deployDir = "部署目录不能为空";
+    if (!form.buildCommand.trim())
+      fieldErrors.buildCommand = "构建命令不能为空";
+    if (!form.updateCommand.trim())
+      fieldErrors.updateCommand = "更新命令不能为空";
     setErrors(fieldErrors);
-    if (Object.keys(fieldErrors).length > 0) return;
+    if (Object.keys(fieldErrors).length > 0)
+      return;
     start.mutate();
   };
 
@@ -139,7 +150,7 @@ export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps)
             <div className="flex gap-1.5">
               <input
                 value={form.localPath}
-                onChange={(e) => setForm({ ...form, localPath: e.target.value })}
+                onChange={e => setForm({ ...form, localPath: e.target.value })}
                 placeholder="/Users/you/projects/my-app"
                 className="th-input font-mono text-[13px]"
               />
@@ -158,14 +169,17 @@ export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps)
             <Field label="目标服务器" error={errors.serverId}>
               <select
                 value={form.serverId}
-                onChange={(e) => setForm({ ...form, serverId: e.target.value })}
+                onChange={e => setForm({ ...form, serverId: e.target.value })}
                 className="th-input"
               >
                 <option value="">选择服务器…</option>
-                {(servers.data ?? []).map((s) => (
+                {(servers.data ?? []).map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.name}（{s.username ? `${s.username}@` : ""}
-                    {s.host}）
+                    {s.name}
+                    （
+                    {s.username ? `${s.username}@` : ""}
+                    {s.host}
+                    ）
                   </option>
                 ))}
               </select>
@@ -174,7 +188,7 @@ export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps)
               <div className="flex gap-1.5">
                 <input
                   value={form.deployDir}
-                  onChange={(e) => setForm({ ...form, deployDir: e.target.value })}
+                  onChange={e => setForm({ ...form, deployDir: e.target.value })}
                   placeholder="/srv/my-app"
                   className="th-input font-mono text-[13px]"
                 />
@@ -198,7 +212,7 @@ export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps)
           <Field label="构建命令（本地，构建并推送镜像）" error={errors.buildCommand}>
             <input
               value={form.buildCommand}
-              onChange={(e) => setForm({ ...form, buildCommand: e.target.value })}
+              onChange={e => setForm({ ...form, buildCommand: e.target.value })}
               placeholder={DEFAULT_BUILD_COMMAND}
               className="th-input font-mono text-[13px]"
             />
@@ -207,7 +221,7 @@ export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps)
           <Field label="更新命令（远程，在部署目录执行）" error={errors.updateCommand}>
             <input
               value={form.updateCommand}
-              onChange={(e) => setForm({ ...form, updateCommand: e.target.value })}
+              onChange={e => setForm({ ...form, updateCommand: e.target.value })}
               placeholder={DEFAULT_UPDATE_COMMAND}
               className="th-input font-mono text-[13px]"
             />
@@ -223,11 +237,13 @@ export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps)
             disabled={start.isPending}
             className="th-btn th-btn-primary px-4"
           >
-            {start.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Rocket className="h-3.5 w-3.5" />
-            )}
+            {start.isPending
+              ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                )
+              : (
+                  <Rocket className="h-3.5 w-3.5" />
+                )}
             {start.isPending ? "启动中…" : "保存并部署"}
           </button>
         </div>
@@ -238,7 +254,7 @@ export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps)
           serverId={form.serverId}
           initialPath={form.deployDir || "~"}
           onPick={(path) => {
-            setForm((f) => ({ ...f, deployDir: path }));
+            setForm(f => ({ ...f, deployDir: path }));
             setBrowsing(false);
           }}
           onClose={() => setBrowsing(false)}
@@ -246,10 +262,10 @@ export const DeployDialog = ({ project, onClose, onStarted }: DeployDialogProps)
       )}
     </div>
   );
-};
+}
 
 /** Walks the server's filesystem over SSH to choose the deploy dir. */
-const ServerDirPicker = ({
+function ServerDirPicker({
   serverId,
   initialPath,
   onPick,
@@ -259,7 +275,7 @@ const ServerDirPicker = ({
   initialPath: string;
   onPick: (path: string) => void;
   onClose: () => void;
-}) => {
+}) {
   const [path, setPath] = useState(initialPath);
 
   const listing = useQuery({
@@ -268,9 +284,11 @@ const ServerDirPicker = ({
   });
 
   const parentOf = (p: string) => {
-    if (p === "~" || p === "/") return null;
+    if (p === "~" || p === "/")
+      return null;
     const cut = p.replace(/\/+$/, "").lastIndexOf("/");
-    if (cut <= 0) return p.startsWith("/") ? "/" : null;
+    if (cut <= 0)
+      return p.startsWith("/") ? "/" : null;
     return p.slice(0, cut);
   };
   const parent = parentOf(path);
@@ -280,7 +298,7 @@ const ServerDirPicker = ({
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
       role="dialog"
       aria-modal
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div className="th-card flex max-h-[70vh] w-full max-w-md flex-col p-4 shadow-xl">
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -304,67 +322,72 @@ const ServerDirPicker = ({
         </div>
 
         <div className="th-bg-inset min-h-[200px] flex-1 overflow-y-auto rounded-xl">
-          {listing.isError ? (
-            <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
-              <p className="text-xs text-[var(--th-danger-fg)]">
-                {listing.error instanceof ApiError
-                  ? listing.error.message
-                  : "目录读取失败"}
-              </p>
-              <button
-                type="button"
-                onClick={() => void listing.refetch()}
-                className="th-btn th-btn-soft px-3 py-1.5 text-xs"
-              >
-                重试
-              </button>
-            </div>
-          ) : listing.isLoading ? (
-            <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-4 w-4 animate-spin th-text-muted" />
-            </div>
-          ) : (
-            <>
-              {parent && (
-                <button
-                  type="button"
-                  onClick={() => setPath(parent)}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] th-text-secondary transition-colors hover:bg-[var(--th-sf-03)]"
-                >
-                  <ArrowUp className="h-3.5 w-3.5" />
-                  ..
-                </button>
-              )}
-              {(listing.data?.entries ?? []).map((entry) => (
-                <button
-                  key={entry.name}
-                  type="button"
-                  disabled={!entry.isDir}
-                  onClick={() =>
-                    entry.isDir &&
-                    setPath(`${path.replace(/\/+$/, "")}/${entry.name}`)
-                  }
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition-colors hover:bg-[var(--th-sf-03)] disabled:cursor-default disabled:hover:bg-transparent"
-                >
-                  {entry.isDir ? (
-                    <Folder className="h-3.5 w-3.5 shrink-0 text-[var(--th-warning-fg)]" />
-                  ) : (
-                    <FileIcon className="h-3.5 w-3.5 shrink-0 th-text-hint" />
-                  )}
-                  <span
-                    className={
-                      entry.isDir ? "th-text-strong truncate" : "th-text-muted truncate"
-                    }
+          {listing.isError
+            ? (
+                <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
+                  <p className="text-xs text-[var(--th-danger-fg)]">
+                    {listing.error instanceof ApiError
+                      ? listing.error.message
+                      : "目录读取失败"}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void listing.refetch()}
+                    className="th-btn th-btn-soft px-3 py-1.5 text-xs"
                   >
-                    {entry.name}
-                  </span>
-                </button>
-              ))}
-              {(listing.data?.entries ?? []).length === 0 && !parent && (
-                <p className="p-4 text-center text-xs th-text-muted">空目录</p>
-              )}
-            </>
-          )}
+                    重试
+                  </button>
+                </div>
+              )
+            : listing.isLoading
+              ? (
+                  <div className="flex h-full items-center justify-center">
+                    <Loader2 className="h-4 w-4 animate-spin th-text-muted" />
+                  </div>
+                )
+              : (
+                  <>
+                    {parent && (
+                      <button
+                        type="button"
+                        onClick={() => setPath(parent)}
+                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] th-text-secondary transition-colors hover:bg-[var(--th-sf-03)]"
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                        ..
+                      </button>
+                    )}
+                    {(listing.data?.entries ?? []).map(entry => (
+                      <button
+                        key={entry.name}
+                        type="button"
+                        disabled={!entry.isDir}
+                        onClick={() =>
+                          entry.isDir
+                          && setPath(`${path.replace(/\/+$/, "")}/${entry.name}`)}
+                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition-colors hover:bg-[var(--th-sf-03)] disabled:cursor-default disabled:hover:bg-transparent"
+                      >
+                        {entry.isDir
+                          ? (
+                              <Folder className="h-3.5 w-3.5 shrink-0 text-[var(--th-warning-fg)]" />
+                            )
+                          : (
+                              <FileIcon className="h-3.5 w-3.5 shrink-0 th-text-hint" />
+                            )}
+                        <span
+                          className={
+                            entry.isDir ? "th-text-strong truncate" : "th-text-muted truncate"
+                          }
+                        >
+                          {entry.name}
+                        </span>
+                      </button>
+                    ))}
+                    {(listing.data?.entries ?? []).length === 0 && !parent && (
+                      <p className="p-4 text-center text-xs th-text-muted">空目录</p>
+                    )}
+                  </>
+                )}
         </div>
 
         <div className="mt-3 flex items-center justify-between gap-2">
@@ -381,9 +404,9 @@ const ServerDirPicker = ({
       </div>
     </div>
   );
-};
+}
 
-const Field = ({
+function Field({
   label,
   error,
   children,
@@ -391,10 +414,12 @@ const Field = ({
   label: string;
   error?: string;
   children: React.ReactNode;
-}) => (
-  <label className="block">
-    <span className="mb-1 block text-xs font-medium th-text-muted">{label}</span>
-    {children}
-    {error && <span className="mt-1 block text-xs text-red-500">{error}</span>}
-  </label>
-);
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium th-text-muted">{label}</span>
+      {children}
+      {error && <span className="mt-1 block text-xs text-red-500">{error}</span>}
+    </label>
+  );
+}

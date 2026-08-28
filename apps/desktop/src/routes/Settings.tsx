@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { cn } from "@githelm/ui";
 import {
   Archive,
   Bell,
@@ -12,7 +12,7 @@ import {
   Server,
   Settings,
 } from "lucide-react";
-import { cn } from "@githelm/ui";
+import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useSettingsStore } from "../stores/settings";
 
@@ -35,7 +35,7 @@ interface SettingCardProps {
   pressed?: boolean;
 }
 
-const SettingCard = ({
+function SettingCard({
   icon: Icon,
   iconBg,
   iconColor,
@@ -44,7 +44,7 @@ const SettingCard = ({
   trailing,
   onClick,
   pressed,
-}: SettingCardProps) => {
+}: SettingCardProps) {
   const Comp = onClick ? "button" : "div";
   return (
     <Comp
@@ -68,24 +68,26 @@ const SettingCard = ({
       {trailing}
     </Comp>
   );
-};
+}
 
-const Pill = ({ label, on }: { label: string; on: boolean }) => (
-  <span
-    className={cn(
-      "rounded-full px-2.5 py-1 text-xs",
-      on
-        ? "bg-[var(--th-success-bg)] text-[var(--th-success-fg)]"
-        : "bg-[var(--th-on-05)] text-[var(--th-text-secondary)]",
-    )}
-  >
-    {label}
-  </span>
-);
+function Pill({ label, on }: { label: string; on: boolean }) {
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2.5 py-1 text-xs",
+        on
+          ? "bg-[var(--th-success-bg)] text-[var(--th-success-fg)]"
+          : "bg-[var(--th-on-05)] text-[var(--th-text-secondary)]",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
 
-export const SettingsPage = () => {
-  const autoUpdate = useSettingsStore((s) => s.autoUpdate);
-  const setAutoUpdate = useSettingsStore((s) => s.setAutoUpdate);
+export function SettingsPage() {
+  const autoUpdate = useSettingsStore(s => s.autoUpdate);
+  const setAutoUpdate = useSettingsStore(s => s.setAutoUpdate);
   const [instanceVersion, setInstanceVersion] = useState("v1.2.0");
 
   useEffect(() => {
@@ -93,7 +95,8 @@ export const SettingsPage = () => {
     api
       .getAppVersion()
       .then((v) => {
-        if (!cancelled) setInstanceVersion(`v${v.version}`);
+        if (!cancelled)
+          setInstanceVersion(`v${v.version}`);
       })
       .catch(() => {});
     return () => {
@@ -186,4 +189,4 @@ export const SettingsPage = () => {
       </div>
     </div>
   );
-};
+}

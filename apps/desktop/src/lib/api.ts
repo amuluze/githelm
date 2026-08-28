@@ -8,17 +8,16 @@
  * (e.g. `pnpm dev` without `tauri dev`), so the UI is reviewable on its own.
  */
 
-import { invoke } from "@tauri-apps/api/core";
 import type {
   AddServerInput,
   CreateProjectInput,
   Deployment,
   GithubStatus,
+  GitRepo,
   Issue,
   LogEntry,
   Project,
   RepoAccount,
-  GitRepo,
   Server,
   ServerDirListing,
   UpdateProjectConfigInput,
@@ -26,12 +25,13 @@ import type {
   UpdateServerInput,
   UpdateStatus,
 } from "@githelm/core";
+import { invoke } from "@tauri-apps/api/core";
 import {
+  generateMockLogs,
   mockDeployments,
   mockIssues,
   mockProjects,
   mockServers,
-  generateMockLogs,
 } from "../mocks/data";
 
 export class ApiError extends Error {
@@ -46,10 +46,12 @@ export class ApiError extends Error {
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-/** Tauri command errors arrive as the serialized Rust payload
+/**
+ * Tauri command errors arrive as the serialized Rust payload
  *  ({message, code}) — a plain object, not an Error instance. Unwrap it so
- *  the actual message reaches toasts instead of "[object Object]". */
-const toApiError = (err: unknown): ApiError => {
+ *  the actual message reaches toasts instead of "[object Object]".
+ */
+function toApiError(err: unknown): ApiError {
   if (err instanceof Error) {
     return new ApiError(err.message);
   }
@@ -63,36 +65,37 @@ const toApiError = (err: unknown): ApiError => {
     }
   }
   return new ApiError(String(err));
-};
+}
 
-const call = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
+async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (!isTauri) {
     return fallback<T>(cmd, args);
   }
   try {
     return await invoke<T>(cmd, args);
-  } catch (err) {
+  }
+  catch (err) {
     throw toApiError(err);
   }
-};
+}
 
 /**
  * Browser-only fallback so the UI can be developed without a Rust backend.
  * Each branch mirrors the Rust command's contract.
  */
-const fallback = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
+async function fallback<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   switch (cmd) {
     case "list_projects":
       return mockProjects as unknown as T;
     case "get_project": {
       const id = (args?.id as string | undefined) ?? "";
-      return (mockProjects.find((p) => p.id === id) ?? null) as unknown as T;
+      return (mockProjects.find(p => p.id === id) ?? null) as unknown as T;
     }
     case "list_deployments": {
       const projectId = args?.projectId as string | undefined;
       return (
         projectId
-          ? mockDeployments.filter((d) => d.projectId === projectId)
+          ? mockDeployments.filter(d => d.projectId === projectId)
           : mockDeployments
       ) as unknown as T;
     }
@@ -103,7 +106,7 @@ const fallback = async <T>(cmd: string, args?: Record<string, unknown>): Promise
     case "list_logs": {
       const targetId = args?.targetId as string | undefined;
       const logs = generateMockLogs();
-      return (targetId ? logs.filter((l) => l.targetId === targetId) : logs) as unknown as T;
+      return (targetId ? logs.filter(l => l.targetId === targetId) : logs) as unknown as T;
     }
     case "check_for_update":
       return {
@@ -120,7 +123,7 @@ const fallback = async <T>(cmd: string, args?: Record<string, unknown>): Promise
     default:
       throw new ApiError(`Mock backend has no handler for "${cmd}"`, "NOT_MOCKED");
   }
-};
+}
 
 export const api = {
   // ── Projects ─────────────────────────────────────────────────────────
@@ -143,12 +146,16 @@ export const api = {
     call<Deployment[]>("list_deployments", { projectId: projectId ?? null }),
   getDeployment: (id: string) =>
     call<Deployment | null>("get_deployment", { id }),
-  /** Starts the pipeline (local build & push → SSH update) and returns the
-   *  building record; progress lands in the logs under the deployment id. */
+  /**
+   * Starts the pipeline (local build & push → SSH update) and returns the
+   *  building record; progress lands in the logs under the deployment id.
+   */
   deployProject: (projectId: string) =>
     call<Deployment>("deploy_project", { projectId }),
-  /** Stops a running pipeline: kills the current command and records the
-   *  deployment as cancelled. Errors when it is no longer running. */
+  /**
+   * Stops a running pipeline: kills the current command and records the
+   *  deployment as cancelled. Errors when it is no longer running.
+   */
   cancelDeployment: (deploymentId: string) =>
     call<void>("cancel_deployment", { deploymentId }),
 
@@ -186,8 +193,10 @@ export const api = {
     }),
 
   // ── SSH terminal (PTY) ────────────────────────────────────────────────
-  /** Spawns an interactive `ssh` PTY; output arrives via the
-   *  `terminal-output` event (base64), exit via `terminal-exit`. */
+  /**
+   * Spawns an interactive `ssh` PTY; output arrives via the
+   *  `terminal-output` event (base64), exit via `terminal-exit`.
+   */
   terminalOpen: (serverId: string) =>
     call<void>("terminal_open", { serverId }),
   terminalWrite: (serverId: string, data: string) =>

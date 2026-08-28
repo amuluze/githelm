@@ -3,14 +3,14 @@ import { z } from "zod";
 /* ─── Domain types ───────────────────────────────────────────────────────── */
 
 export type ProjectStatus = "running" | "stopped" | "building" | "error" | "idle";
-export type DeploymentStatus =
-  | "queued"
-  | "building"
-  | "deploying"
-  | "live"
-  | "failed"
-  | "cancelled"
-  | "rolled-back";
+export type DeploymentStatus
+  = | "queued"
+    | "building"
+    | "deploying"
+    | "live"
+    | "failed"
+    | "cancelled"
+    | "rolled-back";
 export type ServerKind = "ssh" | "cloud";
 export type ServerStatus = "online" | "offline" | "connecting" | "error";
 export type Provider = "github" | "gitlab" | "bitbucket" | "local";
@@ -82,12 +82,12 @@ export interface LogEntry {
 
 export type IssueStatus = "open" | "resolved";
 /** What the checker was looking at when it found the issue. */
-export type IssueKind =
-  | "deployment"
-  | "certificate"
-  | "domain"
-  | "version"
-  | "port";
+export type IssueKind
+  = | "deployment"
+    | "certificate"
+    | "domain"
+    | "version"
+    | "port";
 
 export interface Issue {
   id: string;
@@ -142,9 +142,11 @@ export const addServerSchema = z.object({
   kind: z.enum(["ssh", "cloud"]),
   region: z.string().optional(),
   username: z.string().min(1, "Username is required"),
-  /** Plaintext credential; stored in the OS keychain and, when it is an SSH
+  /**
+   * Plaintext credential; stored in the OS keychain and, when it is an SSH
    *  private key, offered to ssh automatically. Optional — blank means the
-   *  connection relies on the host's ssh config / agent. */
+   *  connection relies on the host's ssh config / agent.
+   */
   credential: z.string().optional(),
   port: z.coerce.number().int().min(1).max(65535).default(22),
 });

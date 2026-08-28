@@ -1,11 +1,11 @@
-import { useEffect } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { useQueryClient } from "@tanstack/react-query";
+import { listen } from "@tauri-apps/api/event";
 import {
   isPermissionGranted,
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
+import { useEffect } from "react";
 
 /** Payload of the Rust-side `deploy-status` event. */
 export interface DeployStatusEvent {
@@ -27,31 +27,32 @@ export interface DeployStatusEvent {
  * states fire an OS notification while the window is hidden (the user is
  * likely watching when it is visible).
  */
-export const useDeployEvents = () => {
+export function useDeployEvents() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
     let alive = true;
     const unlisten = listen<DeployStatusEvent>("deploy-status", (e) => {
-      if (!alive) return;
+      if (!alive)
+        return;
       // Prefix keys match ["deployments"], ["projects"] and ["project", id].
       void queryClient.invalidateQueries({ queryKey: ["deployments"] });
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
       void queryClient.invalidateQueries({ queryKey: ["project"] });
       const { status, projectName } = e.payload;
       if (
-        (status === "live" || status === "failed" || status === "cancelled") &&
-        document.hidden
+        (status === "live" || status === "failed" || status === "cancelled")
+        && document.hidden
       ) {
         void notifyDeploy(status, projectName);
       }
     });
     return () => {
       alive = false;
-      void unlisten.then((off) => off());
+      void unlisten.then(off => off());
     };
   }, [queryClient]);
-};
+}
 
 async function notifyDeploy(status: DeployStatusEvent["status"], projectName: string) {
   try {
@@ -59,7 +60,8 @@ async function notifyDeploy(status: DeployStatusEvent["status"], projectName: st
     if (!granted) {
       granted = (await requestPermission()) === "granted";
     }
-    if (!granted) return;
+    if (!granted)
+      return;
     sendNotification({
       title:
         status === "live"
@@ -74,7 +76,8 @@ async function notifyDeploy(status: DeployStatusEvent["status"], projectName: st
             ? `「${projectName}」部署失败，请查看日志。`
             : `「${projectName}」的部署已取消。`,
     });
-  } catch {
+  }
+  catch {
     // Notifications are best-effort; never break the UI over them.
   }
 }

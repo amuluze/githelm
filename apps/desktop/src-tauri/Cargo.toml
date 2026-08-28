@@ -2,14 +2,18 @@
 name = "githelm-desktop"
 version = "0.1.0"
 description = "Githelm — Tauri 2 + React 19 desktop client"
-authors = ["Githelm contributors"]
+authors = [ "Githelm contributors" ]
 license = "Apache-2.0"
 edition = "2021"
 rust-version = "1.77"
 
 [lib]
 name = "githelm_desktop_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = [
+  "staticlib",
+  "cdylib",
+  "rlib"
+]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -22,23 +26,37 @@ tauri-plugin-store = "2"
 tauri-plugin-os = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-updater = "2"
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = [ "derive" ] }
 serde_json = "1"
-tokio = { version = "1", features = ["sync", "rt", "macros", "process", "io-util", "time"] }
+tokio = { version = "1", features = [
+  "sync",
+  "rt",
+  "macros",
+  "process",
+  "io-util",
+  "time"
+] }
 # keyring 3 ships no platform backend by default (falls back to an in-memory
 # mock where set_password "succeeds" but nothing persists). apple-native wires
 # it to the macOS Security framework.
-keyring = { version = "3", features = ["apple-native"] }
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1", features = ["v4", "serde"] }
+keyring = { version = "3", features = [ "apple-native" ] }
+chrono = { version = "0.4", features = [ "serde" ] }
+uuid = { version = "1", features = [
+  "v4",
+  "serde"
+] }
 thiserror = "2"
 # SQLite persistence for projects/deployments/servers/logs/issues under ~/.githelm/.
 # "bundled" compiles SQLite in so no system library is required at runtime.
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.37", features = [ "bundled" ] }
 dirs = "6"
 # GitHub REST client for the "import from GitHub" flow. Runs on the Rust side
 # so the renderer CSP can stay closed to the network.
-reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls"] }
+reqwest = { version = "0.13", default-features = false, features = [
+  "json",
+  "query",
+  "rustls"
+] }
 # PTY for the SSH terminal page (openpty + winsize ioctls). The ssh process
 # itself is spawned via std Command stdio fds, which keeps it on posix_spawn —
 # forking this process aborts under WKWebView on macOS.
@@ -52,5 +70,5 @@ base64 = "0.22"
 objc2 = "0.6"
 
 [features]
-default = ["custom-protocol"]
-custom-protocol = ["tauri/custom-protocol"]
+default = [ "custom-protocol" ]
+custom-protocol = [ "tauri/custom-protocol" ]

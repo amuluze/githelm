@@ -12,14 +12,16 @@ const STATUS_COLOR: Record<StatusDotProps["status"], string> = {
   idle: "bg-sky-500",
 };
 
-export const StatusDot = ({ status, className, ...props }: StatusDotProps) => (
-  <span
-    className={cn(
-      "inline-block h-2 w-2 rounded-full",
-      STATUS_COLOR[status],
-      className,
-    )}
-    aria-label={status}
-    {...props}
-  />
-);
+export function StatusDot({ status, className, ...props }: StatusDotProps) {
+  return (
+    <span
+      className={cn(
+        "inline-block h-2 w-2 rounded-full",
+        STATUS_COLOR[status],
+        className,
+      )}
+      aria-label={status}
+      {...props}
+    />
+  );
+}

@@ -1,3 +1,4 @@
+import type { Project } from "@githelm/core";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -11,23 +12,27 @@ import {
   Zap,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
-import type { Project } from "@githelm/core";
 import { OrbitIllustration } from "../components/domain/Illustrations";
+import { api } from "../lib/api";
 
 /** home-mock in githelm.pen: greeting + projects card + quick actions + activity rail. */
 
-const greeting = () => {
+function greeting() {
   const h = new Date().getHours();
-  if (h < 5) return "夜深了";
-  if (h < 9) return "早上好";
-  if (h < 12) return "上午好";
-  if (h < 14) return "中午好";
-  if (h < 18) return "下午好";
+  if (h < 5)
+    return "夜深了";
+  if (h < 9)
+    return "早上好";
+  if (h < 12)
+    return "上午好";
+  if (h < 14)
+    return "中午好";
+  if (h < 18)
+    return "下午好";
   return "晚上好";
-};
+}
 
-export const OverviewPage = () => {
+export function OverviewPage() {
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.listProjects });
   const deployments = useQuery({
     queryKey: ["deployments"],
@@ -36,14 +41,15 @@ export const OverviewPage = () => {
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.listServers });
 
   const list = projects.data ?? [];
-  const errored = list.filter((p) => p.status === "error").length;
-  const onlineServers = (servers.data ?? []).filter((s) => s.status === "online").length;
+  const errored = list.filter(p => p.status === "error").length;
+  const onlineServers = (servers.data ?? []).filter(s => s.status === "online").length;
 
   return (
     <div className="flex h-full flex-col gap-6 p-8">
       <header className="flex flex-col gap-1.5">
         <h1 className="text-2xl font-normal leading-tight tracking-[-0.2px] th-text-strong">
-          {greeting()}，Local
+          {greeting()}
+          ，Local
         </h1>
         <p className="text-sm th-text-secondary">这是你各个项目的最新动态</p>
       </header>
@@ -126,9 +132,9 @@ export const OverviewPage = () => {
       </div>
     </div>
   );
-};
+}
 
-const QuickAction = ({
+function QuickAction({
   to,
   icon: Icon,
   title,
@@ -138,20 +144,22 @@ const QuickAction = ({
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   sub: string;
-}) => (
-  <Link
-    to={to}
-    className="th-card flex flex-col gap-1.5 rounded-xl p-3.5 transition-colors hover:bg-[var(--th-bg-hover)]"
-  >
-    <span className="flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-[var(--th-sf-05)]">
-      <Icon className="h-4 w-4 th-text-strong" />
-    </span>
-    <span className="text-sm th-text-strong">{title}</span>
-    <span className="text-xs th-text-muted">{sub}</span>
-  </Link>
-);
+}) {
+  return (
+    <Link
+      to={to}
+      className="th-card flex flex-col gap-1.5 rounded-xl p-3.5 transition-colors hover:bg-[var(--th-bg-hover)]"
+    >
+      <span className="flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-[var(--th-sf-05)]">
+        <Icon className="h-4 w-4 th-text-strong" />
+      </span>
+      <span className="text-sm th-text-strong">{title}</span>
+      <span className="text-xs th-text-muted">{sub}</span>
+    </Link>
+  );
+}
 
-const ActivityRow = ({
+function ActivityRow({
   chipClass,
   icon: Icon,
   iconClass,
@@ -165,19 +173,21 @@ const ActivityRow = ({
   label: string;
   value: string;
   valueClass?: string;
-}) => (
-  <div className="flex items-center justify-between">
-    <div className="flex items-center gap-2.5">
-      <span
-        className={`flex h-7 w-7 items-center justify-center rounded-lg ${chipClass}`}
-      >
-        <Icon className={`h-[15px] w-[15px] ${iconClass}`} />
-      </span>
-      <span className="text-[13px] th-text-secondary">{label}</span>
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2.5">
+        <span
+          className={`flex h-7 w-7 items-center justify-center rounded-lg ${chipClass}`}
+        >
+          <Icon className={`h-[15px] w-[15px] ${iconClass}`} />
+        </span>
+        <span className="text-[13px] th-text-secondary">{label}</span>
+      </div>
+      <span className={`text-[15px] ${valueClass}`}>{value}</span>
     </div>
-    <span className={`text-[15px] ${valueClass}`}>{value}</span>
-  </div>
-);
+  );
+}
 
 const STATUS_LABEL: Record<Project["status"], string> = {
   running: "运行中",
@@ -195,7 +205,7 @@ const STATUS_COLOR: Record<Project["status"], string> = {
   idle: "var(--th-text-muted)",
 };
 
-const ProjectsCard = ({ projects }: { projects: Project[] }) => {
+function ProjectsCard({ projects }: { projects: Project[] }) {
   const navigate = useNavigate();
 
   return (
@@ -206,7 +216,11 @@ const ProjectsCard = ({ projects }: { projects: Project[] }) => {
         </span>
         <div className="flex flex-col gap-0.5">
           <h2 className="text-[15px] th-text-strong">你的项目</h2>
-          <span className="text-xs th-text-muted">{projects.length} 个项目</span>
+          <span className="text-xs th-text-muted">
+            {projects.length}
+            {" "}
+            个项目
+          </span>
         </div>
         <span className="flex-1" />
         <Link
@@ -218,65 +232,72 @@ const ProjectsCard = ({ projects }: { projects: Project[] }) => {
       </div>
       <div className="h-px bg-[var(--th-divider)]" />
 
-      {projects.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3.5 p-6">
-          <OrbitIllustration />
-          <h3 className="text-lg th-text-strong">启动你的第一个项目</h3>
-          <p className="max-w-[420px] text-center text-[13px] leading-[1.5] th-text-secondary">
-            连接仓库或从模板开始 —— Githelm
-            会构建、发布，并在几分钟内为你提供一个可访问的 URL。
-          </p>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate("/library")}
-              className="th-btn th-btn-primary px-4 py-2.5"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              创建项目
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/library")}
-              className="th-btn th-btn-secondary px-4 py-2.5"
-            >
-              从 GitHub 导入
-            </button>
-          </div>
-          <span className="text-xs th-text-hint">提示：按 ⌘ K 可跳转到任意位置</span>
-        </div>
-      ) : (
-        <ul className="min-h-0 flex-1 overflow-auto">
-          {projects.slice(0, 6).map((p) => (
-            <li key={p.id}>
-              <button
-                type="button"
-                onClick={() => navigate(`/projects/${p.id}`)}
-                className="flex w-full items-center gap-3 border-b border-[var(--th-divider)] px-5 py-3 text-left transition-colors last:border-b-0 hover:bg-[var(--th-sf-03)]"
-              >
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--th-sf-05)]">
-                  <Folder className="h-[15px] w-[15px] th-text-strong" />
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm th-text-strong">{p.name}</span>
-                  <span className="truncate text-xs th-text-muted">
-                    {p.repository} · {p.branch}
-                  </span>
-                </span>
-                <span className="shrink-0 text-xs th-text-muted">
-                  {p.deploymentCount} 次部署
-                </span>
-                <span
-                  className="shrink-0 text-xs"
-                  style={{ color: STATUS_COLOR[p.status] }}
+      {projects.length === 0
+        ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3.5 p-6">
+              <OrbitIllustration />
+              <h3 className="text-lg th-text-strong">启动你的第一个项目</h3>
+              <p className="max-w-[420px] text-center text-[13px] leading-[1.5] th-text-secondary">
+                连接仓库或从模板开始 —— Githelm
+                会构建、发布，并在几分钟内为你提供一个可访问的 URL。
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate("/library")}
+                  className="th-btn th-btn-primary px-4 py-2.5"
                 >
-                  {STATUS_LABEL[p.status]}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+                  <Plus className="h-3.5 w-3.5" />
+                  创建项目
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/library")}
+                  className="th-btn th-btn-secondary px-4 py-2.5"
+                >
+                  从 GitHub 导入
+                </button>
+              </div>
+              <span className="text-xs th-text-hint">提示：按 ⌘ K 可跳转到任意位置</span>
+            </div>
+          )
+        : (
+            <ul className="min-h-0 flex-1 overflow-auto">
+              {projects.slice(0, 6).map(p => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/projects/${p.id}`)}
+                    className="flex w-full items-center gap-3 border-b border-[var(--th-divider)] px-5 py-3 text-left transition-colors last:border-b-0 hover:bg-[var(--th-sf-03)]"
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--th-sf-05)]">
+                      <Folder className="h-[15px] w-[15px] th-text-strong" />
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-sm th-text-strong">{p.name}</span>
+                      <span className="truncate text-xs th-text-muted">
+                        {p.repository}
+                        {" "}
+                        ·
+                        {p.branch}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs th-text-muted">
+                      {p.deploymentCount}
+                      {" "}
+                      次部署
+                    </span>
+                    <span
+                      className="shrink-0 text-xs"
+                      style={{ color: STATUS_COLOR[p.status] }}
+                    >
+                      {STATUS_LABEL[p.status]}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
     </section>
   );
-};
+}

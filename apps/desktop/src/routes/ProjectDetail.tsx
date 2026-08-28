@@ -1,6 +1,14 @@
-import { useState } from "react";
+import type { Project, UpdateProjectInput } from "@githelm/core";
+import { formatDuration, updateProjectSchema } from "@githelm/core";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  StatusDot,
+} from "@githelm/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ExternalLink,
@@ -11,22 +19,14 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  StatusDot,
-} from "@githelm/ui";
-import { formatDuration, updateProjectSchema } from "@githelm/core";
-import type { Project, UpdateProjectInput } from "@githelm/core";
-import { api, ApiError } from "../lib/api";
-import { PageHeader } from "../components/domain/PageHeader";
-import { DeploymentRow } from "../components/domain/DeploymentRow";
 import { DeployDialog } from "../components/domain/DeployDialog";
 import { DeploymentLogsDialog } from "../components/domain/DeploymentLogsDialog";
+import { DeploymentRow } from "../components/domain/DeploymentRow";
+import { PageHeader } from "../components/domain/PageHeader";
+import { api, ApiError } from "../lib/api";
 
 const STATUS_LABEL: Record<Project["status"], string> = {
   running: "运行中",
@@ -36,7 +36,7 @@ const STATUS_LABEL: Record<Project["status"], string> = {
   idle: "空闲",
 };
 
-export const ProjectDetailPage = () => {
+export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -49,7 +49,7 @@ export const ProjectDetailPage = () => {
     queryKey: ["project", id],
     queryFn: async () => {
       const list = await api.listProjects();
-      return list.find((p) => p.id === id) ?? null;
+      return list.find(p => p.id === id) ?? null;
     },
     enabled: Boolean(id),
   });
@@ -75,7 +75,7 @@ export const ProjectDetailPage = () => {
       invalidateProject();
       toast.success("项目已更新");
     },
-    onError: (err) =>
+    onError: err =>
       toast.error(err instanceof ApiError ? err.message : "更新项目失败"),
   });
 
@@ -85,7 +85,7 @@ export const ProjectDetailPage = () => {
       toast.success("项目已删除");
       navigate("/projects");
     },
-    onError: (err) =>
+    onError: err =>
       toast.error(err instanceof ApiError ? err.message : "删除项目失败"),
   });
 
@@ -109,7 +109,7 @@ export const ProjectDetailPage = () => {
   }
 
   const p = project.data;
-  const liveDeployment = (deployments.data ?? []).find((d) => d.status === "live");
+  const liveDeployment = (deployments.data ?? []).find(d => d.status === "live");
 
   return (
     <div className="flex h-full flex-col">
@@ -117,15 +117,14 @@ export const ProjectDetailPage = () => {
         <PageHeader
           title={p.name}
           description={`${p.repository} · ${p.branch}`}
-          actions={
+          actions={(
             <>
               {p.url && (
                 <button
                   type="button"
                   className="th-btn th-btn-secondary px-3.5"
                   onClick={() =>
-                    window.open(p.url!, "_blank", "noopener,noreferrer")
-                  }
+                    window.open(p.url!, "_blank", "noopener,noreferrer")}
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   访问
@@ -160,7 +159,7 @@ export const ProjectDetailPage = () => {
                 部署
               </button>
             </>
-          }
+          )}
         />
       </div>
 
@@ -211,7 +210,11 @@ export const ProjectDetailPage = () => {
               <CardTitle className="text-2xl">{p.deploymentCount}</CardTitle>
             </CardHeader>
             <CardContent className="text-xs th-text-muted">
-              本页展示 {deployments.data?.length ?? 0} 条
+              本页展示
+              {" "}
+              {deployments.data?.length ?? 0}
+              {" "}
+              条
             </CardContent>
           </Card>
         </div>
@@ -227,20 +230,22 @@ export const ProjectDetailPage = () => {
           </div>
           <Card className="overflow-hidden p-0">
             <CardContent className="p-0">
-              {(deployments.data ?? []).length === 0 ? (
-                <div className="px-4 py-12 text-center text-sm th-text-muted">
-                  暂无部署记录。
-                </div>
-              ) : (
-                (deployments.data ?? []).map((d) => (
-                  <DeploymentRow
-                    key={d.id}
-                    deployment={d}
-                    projectName={p.name}
-                    onOpen={(dep) => setLogDeploymentId(dep.id)}
-                  />
-                ))
-              )}
+              {(deployments.data ?? []).length === 0
+                ? (
+                    <div className="px-4 py-12 text-center text-sm th-text-muted">
+                      暂无部署记录。
+                    </div>
+                  )
+                : (
+                    (deployments.data ?? []).map(d => (
+                      <DeploymentRow
+                        key={d.id}
+                        deployment={d}
+                        projectName={p.name}
+                        onOpen={dep => setLogDeploymentId(dep.id)}
+                      />
+                    ))
+                  )}
             </CardContent>
           </Card>
         </section>
@@ -282,7 +287,7 @@ export const ProjectDetailPage = () => {
         <EditProjectDialog
           project={p}
           onClose={() => setEditOpen(false)}
-          onSaved={(input) => saveEdit.mutate(input)}
+          onSaved={input => saveEdit.mutate(input)}
           saving={saveEdit.isPending}
         />
       )}
@@ -297,11 +302,13 @@ export const ProjectDetailPage = () => {
       )}
     </div>
   );
-};
+}
 
-/** Edits display fields — name (slug follows), branch and public URL. The
- *  repository binding is immutable. */
-const EditProjectDialog = ({
+/**
+ * Edits display fields — name (slug follows), branch and public URL. The
+ *  repository binding is immutable.
+ */
+function EditProjectDialog({
   project,
   onClose,
   onSaved,
@@ -311,7 +318,7 @@ const EditProjectDialog = ({
   onClose: () => void;
   onSaved: (input: UpdateProjectInput) => void;
   saving: boolean;
-}) => {
+}) {
   const [form, setForm] = useState<UpdateProjectInput>({
     projectId: project.id,
     name: project.name,
@@ -327,7 +334,8 @@ const EditProjectDialog = ({
       const fieldErrors: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
         const key = issue.path[0];
-        if (typeof key === "string") fieldErrors[key] = issue.message;
+        if (typeof key === "string")
+          fieldErrors[key] = issue.message;
       }
       setErrors(fieldErrors);
       return;
@@ -359,27 +367,30 @@ const EditProjectDialog = ({
           <Field label="名称" error={errors.name}>
             <input
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={e => setForm({ ...form, name: e.target.value })}
               className="th-input"
             />
           </Field>
           <Field label="分支" error={errors.branch}>
             <input
               value={form.branch}
-              onChange={(e) => setForm({ ...form, branch: e.target.value })}
+              onChange={e => setForm({ ...form, branch: e.target.value })}
               className="th-input"
             />
           </Field>
           <Field label="访问 URL（可选）" error={errors.url}>
             <input
               value={form.url ?? ""}
-              onChange={(e) => setForm({ ...form, url: e.target.value })}
+              onChange={e => setForm({ ...form, url: e.target.value })}
               placeholder="https://app.example.com"
               className="th-input"
             />
           </Field>
           <p className="text-xs th-text-muted">
-            仓库 <code className="font-mono">{project.repository}</code>{" "}
+            仓库
+            {" "}
+            <code className="font-mono">{project.repository}</code>
+            {" "}
             不可修改 —— 它标识这个导入的项目。
           </p>
         </div>
@@ -395,9 +406,9 @@ const EditProjectDialog = ({
       </form>
     </div>
   );
-};
+}
 
-const ConfirmDeleteDialog = ({
+function ConfirmDeleteDialog({
   project,
   onClose,
   onConfirm,
@@ -407,37 +418,41 @@ const ConfirmDeleteDialog = ({
   onClose: () => void;
   onConfirm: () => void;
   deleting: boolean;
-}) => (
-  <div
-    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-    role="dialog"
-    aria-modal
-  >
-    <div className="th-card w-full max-w-sm p-5 shadow-xl">
-      <h2 className="text-base font-semibold th-text-title">删除项目</h2>
-      <p className="mt-2 text-[13px] leading-[1.6] th-text-secondary">
-        将删除「{project.name}」及其全部部署记录与日志。服务器配置会保留。
-        此操作不可撤销。
-      </p>
-      <div className="mt-5 flex justify-end gap-2">
-        <button type="button" onClick={onClose} className="th-btn th-btn-soft px-3.5">
-          取消
-        </button>
-        <button
-          type="button"
-          disabled={deleting}
-          onClick={onConfirm}
-          className="th-btn px-4 text-[var(--th-danger-fg)]"
-          style={{ backgroundColor: "var(--th-danger-bg)" }}
-        >
-          {deleting ? "删除中…" : "确认删除"}
-        </button>
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      role="dialog"
+      aria-modal
+    >
+      <div className="th-card w-full max-w-sm p-5 shadow-xl">
+        <h2 className="text-base font-semibold th-text-title">删除项目</h2>
+        <p className="mt-2 text-[13px] leading-[1.6] th-text-secondary">
+          将删除「
+          {project.name}
+          」及其全部部署记录与日志。服务器配置会保留。
+          此操作不可撤销。
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="th-btn th-btn-soft px-3.5">
+            取消
+          </button>
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={onConfirm}
+            className="th-btn px-4 text-[var(--th-danger-fg)]"
+            style={{ backgroundColor: "var(--th-danger-bg)" }}
+          >
+            {deleting ? "删除中…" : "确认删除"}
+          </button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+}
 
-const Field = ({
+function Field({
   label,
   error,
   children,
@@ -445,10 +460,12 @@ const Field = ({
   label: string;
   error?: string;
   children: React.ReactNode;
-}) => (
-  <label className="block">
-    <span className="mb-1 block text-xs font-medium th-text-muted">{label}</span>
-    {children}
-    {error && <span className="mt-1 block text-xs text-red-500">{error}</span>}
-  </label>
-);
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium th-text-muted">{label}</span>
+      {children}
+      {error && <span className="mt-1 block text-xs text-red-500">{error}</span>}
+    </label>
+  );
+}

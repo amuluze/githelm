@@ -1,6 +1,7 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 // Tauri expects a fixed port and serves frontend assets in production.
 export default defineConfig(async () => ({

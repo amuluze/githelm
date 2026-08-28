@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 interface SettingsState {
   autoUpdate: boolean;
@@ -8,14 +8,14 @@ interface SettingsState {
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    set => ({
       autoUpdate: true,
-      setAutoUpdate: (autoUpdate) => set({ autoUpdate }),
+      setAutoUpdate: autoUpdate => set({ autoUpdate }),
     }),
     {
       name: "githelm.settings",
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ autoUpdate: s.autoUpdate }),
+      partialize: s => ({ autoUpdate: s.autoUpdate }),
     },
   ),
 );
